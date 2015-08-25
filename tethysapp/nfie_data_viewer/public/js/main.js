@@ -42,10 +42,10 @@ $(function () {
 
     params = getSearchParameters();
 
-    /****************************
-     **IS THERE A FILE TO LOAD?**
-     ****************************/
-    if (params["src"] == undefined || params["src"] == null) {
+    /***************************************
+     *****WAS A FILE PASSED IN THE URL?*****
+     ***************************************/
+    if (params["src"] == undefined || params["src"] == null) { //IF NOT
         //change welcome modal to show info about loading viewer from other app
         $('#welcome-info').html('<p>This app redirects from either the Tethys NFIE iRODS Browser or HydroShare and is ' +
                                 'used to view RAPID Output NetCDF files in an interactive way. Without being redirected from one' +
@@ -53,17 +53,16 @@ $(function () {
                                 'RAPID Output NetCDF file. Please click the links to the resources above to browse their' +
                                 'file repositories. When locating an applicable NetCDF file, you will be given a "Open File' +
                                 'in Tethys Viewer" link that will redirect you here to view the chosen file. Good luck!');
-    } else {
+    } else { //IF FILE WAS PASSED
 
-        /****************************
-         ****BEGIN FILE DOWNLOAD*****
-         ****************************/
-
-        //place filename in sidebar so we know which file we're viewing
+        //place filename in div so we know which file we're viewing
         var lastDash = params['res_id'].lastIndexOf('/');
         var fileName = params['res_id'].slice(lastDash + 1);
         $('#file-name').html('<p><strong>Your netCDF file:</strong> ' + fileName + '</p>');
 
+        /****************************
+         ****BEGIN FILE DOWNLOAD*****
+         ****************************/
         $.ajax({
             type: 'GET',
             url: 'start-file-download',
@@ -106,7 +105,7 @@ $(function () {
                        '<img id="img-file-loading" src="/static/nfie_data_viewer/images/ajax-loader.gif"/></p>');
 
         /****************************
-         ****SET ONCLOSE FUNCTION****
+         ****SET ON-CLOSE FUNCTION****
          ****************************/
         window.onbeforeunload = function() {
             $.ajax({

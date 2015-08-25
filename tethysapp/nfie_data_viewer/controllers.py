@@ -2,11 +2,9 @@ import os
 import shutil
 import tempfile
 import operator
-
 import requests
 import netCDF4 as nc
-
-# import numpy as np
+from hs_restclient import HydroShare, HydroShareAuthBasic
 from django.shortcuts import render
 from django.http import JsonResponse
 from tethys_apps.sdk.gizmos import Button, TextInput, ToggleSwitch, ButtonGroup
@@ -80,22 +78,24 @@ def start_file_download(request):
 
         try:
             file_path = get_data['file_id']
+            temp_dir = tempfile.mkdtemp()
 
             if get_data['redirect_src'] == 'iRODS':
                 download = requests.get(file_path, stream=True)
+                filename = os.path.basename(file_path)
+                local_file_path = os.path.join(temp_dir, filename)
+                with open(local_file_path, 'wb') as fd:
+                    for chunk in download.iter_content(1024):
+                        fd.write(chunk)
+
             elif get_data['redirect_src'] == 'hs':
-                pass
+                auth = HydroShareAuthBasic(username='scrawley', password='rebound1')
+                hs = HydroShare(auth=auth)
+                filename = 'temp_file'
+                local_file_path = os.path.join(temp_dir, filename)
+                download = hs.getResourceFile(file_path, filename, destination=local_file_path)
             else:
                 pass
-
-            # download the file to a temp directory
-            temp_dir = tempfile.mkdtemp()
-            filename = os.path.basename(file_path)
-            local_file_path = os.path.join(temp_dir, filename)
-
-            with open(local_file_path, 'wb') as fd:
-                for chunk in download.iter_content(1024):
-                    fd.write(chunk)
 
             # extract the netcdf data to be plotted
             data_nc = nc.Dataset(local_file_path, mode="r")
