@@ -1,0 +1,92 @@
+{% extends "nfie_data_viewer/base.html" %}
+
+{% load staticfiles %}
+
+{% load tethys_gizmos %}
+
+{% block styles %}
+{{ block.super }}
+<link href="{% static 'nfie_data_viewer/vendor/openlayers3.8.2/ol.css' %}" rel="stylesheet"/>
+{% endblock %}
+
+{% block app_navigation_items %}
+{% gizmo text_input txtLocation %}
+{% gizmo button btnSearch %}
+<hr>
+<div id="chart-buttons" class="hidden">
+    {% gizmo button_group clearButtons %}
+</div>
+<div id="search_output"></div>
+{% endblock %}
+
+{% block app_content_wrapper_override %}
+<!-- Modal  -->
+<div class="modal fade" id="chart-popup" role="dialog">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Welcome to the NFIE Data Viewer!</h4>
+            </div>
+            <div class="modal-body">
+                <div id="welcome-info">
+                    <ol>
+                        <h6><li>Navigate to applicable location</li></h6>
+                            <p>Scroll and zoom on map or type location in left side panel</p>
+                            <p>Note: All possible U.S. river segments show up in blue once a certain zoom-level is reached.</p>
+                        <h6><li>Await file upload completion</li></h6>
+                            <p>File must be uploaded and prepared for viewing. The status is shown above the upper-right corner of the map.</p>
+                        <h6><li>Once file is ready, click on segment(s).</li></h6>
+                            <p>
+                                Note: Nothing will happen when clicking unless the status reads "File is ready." <br>
+                                Multiple segments can be selected. For each segment selected:
+                            </p>
+                            <ul>
+                                <li>The selected segment is highlighted</li>
+                                <li>Associated information shows up in the left side panel.</li>
+                                <li>The associated netCDF data is plotted on a chart below the graph.</li>
+                            </ul>
+                        <h6><li>Clear or Animate Selections</li></h6>
+                    </ol>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" id="close-popup" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- End Modal -->
+{{block.super}}
+{% endblock %}
+
+{% block app_content %}
+<div id="file-info">
+    <div class="col-md-9" id="file-name"></div>
+    <div class="col-md-3" id="status"></div>
+</div>
+<div id="map-view"></div>
+<br><br>
+<div id="info"></div>
+<br><br>
+<div id="nc-chart" class="hidden"></div>
+<div class="always-hidden">
+    {% gizmo toggle_switch unitsToggle %}
+</div>
+{% endblock %}
+
+{% block app_actions %}
+{% endblock %}
+
+
+{% block scripts %}
+{{ block.super }}
+<script src="{% static 'nfie_data_viewer/vendor/openlayers3.8.2/ol.js' %}" type="text/javascript"></script>
+<script src="{% static 'nfie_data_viewer/vendor/highcharts4.1.7/hc.js' %}" type="text/javascript"></script>
+<script src="{% static 'nfie_data_viewer/vendor/highcharts4.1.7/hc-more.js' %}" type="text/javascript"></script>
+<script src="{% static 'nfie_data_viewer/vendor/highcharts4.1.7/exp.js' %}" type="text/javascript"></script>
+<script src="{% static 'nfie_data_viewer/vendor/WATERS/WATERSServices-1.0.0-min.js' %}"></script>
+<script type="text/javascript"
+     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDPgvDUpbEwcbg9C0cRTfDtDa-Vj4WBwI0">
+</script>
+{% endblock %}

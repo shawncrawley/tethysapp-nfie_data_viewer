@@ -1,0 +1,45 @@
+#map-view {
+    height: 25em;
+    width: 100%;
+}
+#nc-chart {
+    height: 25em;
+}
+.popover-content {
+    min-width: 300px;
+}
+.wait {
+    background-color: yellow;
+    color: black;
+    font-weight: bold;
+    border-radius: 10px;
+    text-align: center;
+    vertical-align: middle;
+}
+.success {
+    background-color: green;
+    color: white;
+    font-weight: bold;
+    border-radius: 10px;
+}
+.error {
+    background-color: red;
+    color: white;
+    font-weight: bold;
+    border-radius: 10px;
+}
+#info, #loading-globe, #app-navigation, #status, .modal-title{
+    text-align: center;
+}
+#file-info {
+    font-size: 10px;
+}
+h6 {
+    font-size: 18px;
+}
+.always-hidden {
+    display: none;
+}
+.input-group {
+    left: 50px;
+}
