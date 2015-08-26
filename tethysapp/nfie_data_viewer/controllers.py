@@ -50,7 +50,6 @@ def home(request):
 
     clearButtons = ButtonGroup(buttons=[btnClearLast, btnClearAll], vertical=True)
 
-
     unitsToggle = ToggleSwitch(name='units-toggle',
                                on_label='Metric',
                                off_label='English',
@@ -89,11 +88,14 @@ def start_file_download(request):
                         fd.write(chunk)
 
             elif get_data['redirect_src'] == 'hs':
-                auth = HydroShareAuthBasic(username='scrawley', password='rebound1')
-                hs = HydroShare(auth=auth)
-                filename = 'temp_file'
-                local_file_path = os.path.join(temp_dir, filename)
-                download = hs.getResourceFile(file_path, filename, destination=local_file_path)
+                auth = HydroShareAuthBasic(username='*****', password='*****')
+                hs = HydroShare(auth=auth, hostname="playground.hydroshare.org", use_https=False)
+                resource_data = hs.getSystemMetadata(file_path)
+                filename = resource_data['resource_title']
+                # this will only work if there is only one file in the resource and if
+                # the resource title is the same as this one file's name
+                download = hs.getResourceFile(file_path, filename, destination=temp_dir)
+                local_file_path = temp_dir + "/" + filename
             else:
                 pass
 
@@ -115,7 +117,7 @@ def start_file_download(request):
             print err
             return JsonResponse({'error': err})
     else:
-        return JsonResponse({'error': "Bad request. Must be a \"GET\" request."})
+        return JsonResponse({'error': "Bad request. Must be a GET request."})
 
 
 def get_netcdf_data(request):
@@ -161,7 +163,7 @@ def get_netcdf_data(request):
         except Exception, err:
             return JsonResponse({'error': err})
     else:
-        return JsonResponse({'error': "Bad request. Must be a \"GET\" request."})
+        return JsonResponse({'error': "Bad request. Must be a GET request."})
 
 
 def delete_file(request):

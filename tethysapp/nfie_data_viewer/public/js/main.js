@@ -4,14 +4,14 @@
 var params, prmstr, prmarr, tmparr;
 
 //variables related to the map
-var map, start_point_layer, click_point_layer, end_point_layer, indexing_path_layer, selected_streams_layer, base_layer, streams_layer;
+var map, base_layer, all_streams_layer, selected_streams_layer;
 var flag_geocoded;
 
 //variables related to the delineation process
 var comid, fmeasure, gnis_name, wbd_huc12;
 
 //variables related to the netcdf chart
-var default_chart_settings, nc_chart, chart_data, numSeries, plotCounter = 1;
+var default_chart_settings, nc_chart, chart_data, plotCounter = 1;
 
 //jQuery handles
 var infoDiv = $('#info');
@@ -45,7 +45,7 @@ $(function () {
     /***************************************
      *****WAS A FILE PASSED IN THE URL?*****
      ***************************************/
-    if (params["src"] == undefined || params["src"] == null) { //IF NOT
+    if (params["src"] == undefined || params["src"] == null) {
         //change welcome modal to show info about loading viewer from other app
         $('#welcome-info').html('<p>This app redirects from either the Tethys NFIE iRODS Browser or HydroShare and is ' +
                                 'used to view RAPID Output NetCDF files in an interactive way. Without being redirected from one' +
@@ -53,7 +53,7 @@ $(function () {
                                 'RAPID Output NetCDF file. Please click the links to the resources above to browse their' +
                                 'file repositories. When locating an applicable NetCDF file, you will be given a "Open File' +
                                 'in Tethys Viewer" link that will redirect you here to view the chosen file. Good luck!');
-    } else { //IF FILE WAS PASSED
+    } else {
 
         //place filename in div so we know which file we're viewing
         var lastDash = params['res_id'].lastIndexOf('/');
@@ -86,8 +86,6 @@ $(function () {
                     map.on('click', function(evt) {
                         flag_geocoded=false;
                         var coordinate = evt.coordinate;
-                        //addClickPoint(coordinate);
-
                         var lonlat = ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326');
                         reverse_geocode(lonlat);
                         if (map.getView().getZoom()<12) {
@@ -125,9 +123,9 @@ $(function () {
     //show welcome modal
     popupDiv.modal('show');
 
-    /****************************
-     *******INITIALIZE MAP*******
-     ****************************/
+    /**********************************
+     ****INITIALIZE MAP AND LAYERS*****
+     **********************************/
     map = new ol.Map({
         target: 'map-view',
         view: new ol.View({
@@ -144,73 +142,6 @@ $(function () {
             imagerySet: 'AerialWithLabels'
         })
 	});
-
-    click_point_layer = new ol.layer.Vector({
-        source: new ol.source.Vector(),
-        style: new ol.style.Style({
-            fill: new ol.style.Fill({
-                color: 'rgba(255, 255, 255, 0.2)'
-            }),
-            stroke: new ol.style.Stroke({
-                color: '#ffcc33',
-                width: 1
-            }),
-            image: new ol.style.Circle({
-                radius: 1,
-                fill: new ol.style.Fill({
-                    color: '#ffcc33'
-                })
-            })
-        })
-    });
-
-    start_point_layer = new ol.layer.Vector({
-        source: new ol.source.Vector(),
-        style: new ol.style.Style({
-            fill: new ol.style.Fill({
-                color: 'rgba(255,100,100,0.6)'
-            }),
-            stroke: new ol.style.Stroke({
-                color: '#ffccff',
-                width: 2
-            }),
-            image: new ol.style.Circle({
-                radius: 4,
-                fill: new ol.style.Fill({
-                    color: '#ffccff'
-                })
-            })
-        })
-    });
-
-    end_point_layer = new ol.layer.Vector({
-        source: new ol.source.Vector(),
-        style: new ol.style.Style({
-            fill: new ol.style.Fill({
-                color: 'rgba(255,100,100,0.6)'
-            }),
-            stroke: new ol.style.Stroke({
-                color: '#00ccff',
-                width: 2
-            }),
-            image: new ol.style.Circle({
-                radius: 4,
-                fill: new ol.style.Fill({
-                    color: '#00ccff'
-                })
-            })
-        })
-    });
-
-    indexing_path_layer = new ol.layer.Vector({
-        source: new ol.source.Vector(),
-        style: new ol.style.Style({
-            stroke: new ol.style.Stroke({
-                color: '#00cc00',
-                width: 2
-            })
-        })
-    });
 
     var createLineStyleFunction = function() {
         return function(feature, resolution) {
@@ -234,7 +165,7 @@ $(function () {
 
     var getText = function(feature, resolution) {
         var maxResolution = 100;
-        var text = feature.attributes.name;
+        var text = feature.get('name');
         if (resolution > maxResolution) {
             text = '';
         }
@@ -273,7 +204,7 @@ $(function () {
         }))
     });
 
-    streams_layer = new ol.layer.Vector({
+    all_streams_layer = new ol.layer.Vector({
         source: vectorSource,
         style: new ol.style.Style({
             stroke: new ol.style.Stroke({
@@ -285,11 +216,7 @@ $(function () {
     });
 
     map.addLayer(base_layer);
-    map.addLayer(streams_layer);
-    map.addLayer(click_point_layer);
-    map.addLayer(start_point_layer);
-    map.addLayer(end_point_layer);
-    map.addLayer(indexing_path_layer);
+    map.addLayer(all_streams_layer);
     map.addLayer(selected_streams_layer);
 
     find_current_location();
@@ -342,6 +269,10 @@ $(function () {
     });
 });
 
+/****************************
+ ***MAP VIEW FUNCTIONALITY***
+ ****************************/
+
 function find_current_location() {
     navigator.geolocation.getCurrentPosition(function(position) {
         var lat = position.coords.latitude;
@@ -349,27 +280,6 @@ function find_current_location() {
         CenterMap(lat,lon);
         map.getView().setZoom(8);
     });
-}
-
-function addClickPoint(coordinates){
-    // Check if the feature exists. If not then create it.
-    // If it does exist, then just change its geometry to the new coords.
-    var geometry = new ol.geom.Point(coordinates);
-    if (click_point_layer.getSource().getFeatures().length==0){
-        var feature = new ol.Feature({
-            geometry: geometry,
-            attr: 'Some Property'
-        });
-        click_point_layer.getSource().addFeature(feature);
-    } else {
-        click_point_layer.getSource().getFeatures()[0].setGeometry(geometry);
-    }
-}
-
-function clear_location_layers() {
-    start_point_layer.getSource().clear();
-    end_point_layer.getSource().clear();
-    indexing_path_layer.getSource().clear();
 }
 
 function CenterMap(lat,lon){
@@ -381,9 +291,8 @@ function CenterMap(lat,lon){
     map.getView().setCenter(coords);
 }
 
-
 /****************************************
- ****EPA WMS FUNCTIONAL INTERACTIONS*****
+ *********EPA WMS FUNCTIONALITY**********
  ****************************************/
 function run_point_indexing_service(lonlat) {
     var inputLon = lonlat[0];
@@ -407,24 +316,20 @@ function run_point_indexing_service(lonlat) {
         "optOutPrettyPrint": 0,
         "optClientRef": "CodePen"
     };
-    clear_location_layers();
     waiting_pis();
     WATERS.Services.PointIndexingService(data, options);
-    // The service runs and when it is done, ti will call either the
-    // success or error functions. So the actual actions upon success all
-    // happen in the success function.
+    /* The service runs and when it is done, it will call either the
+    success or error functions. So the actual actions upon success all
+    happen in the success function. */
 }
 
-function report_failed_search(MessageText){
-    //Set the message of the bad news
-    searchOutput.append('<strong>Search Results:</strong><br>' + MessageText);
-   // clear_location_layers();
-    gnis_name = null;
-    map.getView().setZoom(4);
+function waiting_pis() {
+    searchOutput.append('<div class="search-output-loading">' +
+        '<img id="loading-globe" src="http://www.epa.gov/waters/tools/globe_spinning_small.gif"></div>');
 }
 
 function pis_success(result, textStatus) {
-    $('#search-output-loading').remove();
+    $('.search-output-loading').remove();
     var srv_rez = result.output;
     if (srv_rez == null) {
         if ( result.status.status_message !== null ) {
@@ -442,34 +347,31 @@ function pis_success(result, textStatus) {
     fmeasure = srv_fl[0].fmeasure.toFixed(2).toString();
     gnis_name = srv_fl[0].gnis_name;
     wbd_huc12 = srv_fl[0].wbd_huc12;
-    searchOutput.append('<div><strong>Info for Selection ' + ((plotCounter / 2) + 0.5) + ':</strong><br>' +
+    var selectionName = getSelectionName();
+    searchOutput.append('<div><strong>Info for ' + selectionName + ':</strong><br>' +
         'Feature Name = ' + gnis_name + '<br>' +
         'COMID = ' + comid + '<br>' +
         'Reach Code = ' + reachcode + '<br>' +
         'Measure = ' + fmeasure + ' meters<br>' +
         'HUC 12 = ' + wbd_huc12 + '<br></div>');
 
-    //add the found start point, end point, indexing path, and flow line to the map
-    clear_location_layers();
-    //start_point_layer.getSource().addFeature(geojson2feature(srv_rez.start_point));
-    end_point_layer.getSource().addFeature(geojson2feature(srv_rez.end_point));
-    //indexing_path_layer.getSource().addFeature(geojson2feature(srv_rez.indexing_path));
+    //add the selected flow line to the map
     for (var i in srv_fl){
-        var newFeatureName = "Selection " + ((plotCounter / 2) + 0.5);
         selected_streams_layer.getSource().addFeature(geojson2feature(srv_fl[i].shape));
-        var numFeatures = selected_streams_layer.getSource().getFeatures().length;
-        var lastFeature = selected_streams_layer.getSource().getFeatures()[numFeatures-1];
-        lastFeature.attributes = {"name": newFeatureName};
     }
-
-    var coord = end_point_layer.getSource().getFeatures()[0].getGeometry().getCoordinates();
-    var LLcoord = ol.proj.transform(coord,'EPSG:3857','EPSG:4326');
 
     get_netcdf_chart_data(comid);
 }
 
 function pis_error(XMLHttpRequest, textStatus, errorThrown) {
     report_failed_search(textStatus);
+}
+
+function report_failed_search(MessageText){
+    //Set the message of the bad news
+    searchOutput.append('<strong>Search Results:</strong><br>' + MessageText);
+    gnis_name = null;
+    map.getView().setZoom(4);
 }
 
 function geojson2feature(myGeoJSON) {
@@ -481,8 +383,18 @@ function geojson2feature(myGeoJSON) {
     }
     var myGeometry = geojsonformatter.readGeometry(myGeoJSON);
     myGeometry.transform('EPSG:4326','EPSG:3857');
-    return new ol.Feature(myGeometry);
+    //name the feature according to the selection number
+    var newFeatureName = getSelectionName();
+
+    return new ol.Feature({
+        geometry: myGeometry,
+        name: newFeatureName
+    });
 }
+
+/****************************************
+ *****GOOGLE GEOCODER FUNCTIONALITY******
+ ****************************************/
 
 function run_geocoder() {
     var g = new google.maps.Geocoder();
@@ -502,10 +414,8 @@ function geocoder_success(results, status) {
         };
 
         var coords = ol.proj.transform(dbPoint.coordinates, 'EPSG:4326','EPSG:3857');
-        addClickPoint(coords);
         CenterMap(Lat,Lon);
         map.getView().setZoom(12);
-        run_point_indexing_service([Lon,Lat]);
     } else {
         alert("Geocode was not successful for the following reason: " + status);
     }
@@ -528,7 +438,7 @@ function reverse_geocode_success(results, status) {
         document.getElementById("txtLocation").value = "Location Not Available";
     }
 }
-
+//code calling this function was added to tethys gizmo button in controllers.py
 function handle_search_key(e) {
     // This handles pressing the enter key to initiate the location search.
     if (e.keyCode == 13) {
@@ -536,10 +446,9 @@ function handle_search_key(e) {
     }
 }
 
-function waiting_pis() {
-    searchOutput.append('<div id="search-output-loading>' +
-        '<img id="loading-globe" src="http://www.epa.gov/waters/tools/globe_spinning_small.gif"></div>');
-}
+/****************************************
+ *******BUILD CHART FUNCTIONALITY********
+ ****************************************/
 
 function get_netcdf_chart_data(comid) {
     infoDiv.html('<p><strong>Retrieving data for specific reach...' +
@@ -557,6 +466,7 @@ function get_netcdf_chart_data(comid) {
             console.log(jqXHR);
             console.log(textStatus);
             console.log(errorThrown);
+            clearErrorSelection();
         },
         success: function (data) {
             if ("success" in data) {
@@ -578,11 +488,11 @@ function get_netcdf_chart_data(comid) {
             } else if ("error" in data) {
                 infoDiv.html('<p><strong>' + data['error'] + '</strong></p>');
                 infoDiv.removeClass('hidden');
-                clearLastSelection();
+                clearErrorSelection();
             } else {
                 infoDiv.html('<p><strong>An unexplainable error occurred. Why? Who knows...</strong></p>');
                 infoDiv.removeClass('hidden');
-                clearLastSelection()
+                clearErrorSelection();
             }
         }
     });
@@ -602,12 +512,7 @@ var convertTimeSeriesMetricToEnglish = function (time_series) {
 };
 
 var plotData = function(data) {
-    var seriesName;
-    if (plotCounter % 2 == 0) {
-        seriesName = "Selection " + (plotCounter / 2);
-    } else {
-        seriesName = "Selection " + ((plotCounter / 2) + 0.5);
-    }
+    var seriesName = getSelectionName();
     var data_series = {
         name: seriesName,
         data: data,
@@ -617,17 +522,8 @@ var plotData = function(data) {
     plotCounter++;
 };
 
-function clearSelections() {
-    while(nc_chart.series.length > 0) {
-        nc_chart.series[0].remove();
-    }
-    selected_streams_layer.getSource().clear();
-    plotCounter = 1;
-    searchOutput.html('');
-}
-
 function updateChart(state) {
-    numSeries = nc_chart.series.length;
+    var numSeries = nc_chart.series.length;
     var i;
     if (state == true) {
         for (i = 0; i < numSeries; i++) {
@@ -654,6 +550,7 @@ function updateChart(state) {
     }
 }
 
+
 function hideSeries(seriesNum) {
     var item = nc_chart.series[seriesNum];
     item.options.showInLegend = false;
@@ -671,16 +568,58 @@ function showSeries(seriesNum) {
     nc_chart.series[seriesNum].show();
 }
 
+/****************************************
+ ***INTERACTIVE BUTTONS FUNCTIONALITY****
+ ****************************************/
+
 function toggleUnitsButton() {
     $('#units-toggle').bootstrapSwitch('toggleState', false);
 }
-
+//code calling this function was added to tethys gizmo button in controllers.py
 function clearLastSelection() {
+    if (searchOutput.children() != []) {
+        searchOutput.children().last().remove()
+    }
+    var numSeries = nc_chart.series.length;
+    if (numSeries > 0) {
+        nc_chart.series[numSeries - 1].remove(); //remove cms series
+        plotCounter--;
+        nc_chart.series[numSeries - 2].remove(); //remove cfs series
+        plotCounter--;
+    }
+    var numFeatures = selected_streams_layer.getSource().getFeatures().length;
+    if (numFeatures > 0) {
+        var lastFeature = selected_streams_layer.getSource().getFeatures()[numFeatures - 1];
+        selected_streams_layer.getSource().removeFeature(lastFeature);
+    }
+}
+
+function clearErrorSelection() {
     searchOutput.children().last().remove();
-    numSeries = nc_chart.series.length;
-    nc_chart.series[numSeries-1].remove(); //remove cms series
-    nc_chart.series[numSeries-2].remove(); //remove cfs series
     var numFeatures = selected_streams_layer.getSource().getFeatures().length;
     var lastFeature = selected_streams_layer.getSource().getFeatures()[numFeatures-1];
     selected_streams_layer.getSource().removeFeature(lastFeature);
+}
+//code calling this function was added to tethys gizmo button in controllers.py
+function clearSelections() {
+    while(nc_chart.series.length > 0) {
+        nc_chart.series[0].remove();
+    }
+    selected_streams_layer.getSource().clear();
+    plotCounter = 1;
+    searchOutput.html('');
+}
+
+/****************************************
+ *********GLOBAL FUNCTIONALITY**********
+ ****************************************/
+
+function getSelectionName() {
+    var selectionName;
+    if (plotCounter % 2 == 0) {
+        selectionName = "Selection " + (plotCounter / 2);
+    } else {
+        selectionName = "Selection " + ((plotCounter / 2) + 0.5);
+    }
+    return selectionName;
 }

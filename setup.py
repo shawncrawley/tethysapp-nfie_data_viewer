@@ -10,7 +10,7 @@ app_class = 'nfie_data_viewer.app:NFIEDataViewer'
 app_package_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tethysapp', app_package)
 
 ### Python Dependencies ###
-dependencies = ['requests',]
+dependencies = ['requests', 'hs_restclient',]
 
 setup(
     name=release_package,
