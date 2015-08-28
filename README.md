@@ -9,7 +9,9 @@ See: https://github.com/CI-WATER/tethys and http://docs.tethys.ci-water.org**
 - hs_restclient-python (python library)
 - netCDF4-python (Python package)
 
-##Install hs_restclient:
+##Install Prerequisites:
+
+###Install hs_restclient:
 See: http://hs-restclient.readthedocs.org/en/latest/#installation
 
 ###Install netCDF4-python on Ubuntu:
