@@ -10,18 +10,19 @@
 {% endblock %}
 
 {% block app_navigation_items %}
-{% gizmo text_input txtLocation %}
-{% gizmo button btnSearch %}
-<hr>
-<div id="chart-buttons" class="hidden">
-    {% gizmo button_group clearButtons %}
+<div id="file-info">
+    <div id="file-name"></div>
+    <br>
+    <div id="status"></div>
+    <br>
+    <button type="button" class="btn btn-info btn-lg" data-toggle="modal" data-target="#welcome-popup">Instructions</button>
 </div>
-<div id="search_output"></div>
+<div id="search-output"></div>
 {% endblock %}
 
 {% block app_content_wrapper_override %}
 <!-- Modal  -->
-<div class="modal fade" id="chart-popup" role="dialog">
+<div class="modal fade" id="welcome-popup" role="dialog">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
@@ -32,20 +33,20 @@
                 <div id="welcome-info">
                     <ol>
                         <h6><li>Navigate to applicable location</li></h6>
-                            <p>Scroll and zoom on map or type location in left side panel</p>
-                            <p>Note: All possible U.S. river segments show up in blue once a certain zoom-level is reached.</p>
+                        <p>Scroll and zoom on map or type location in left side panel</p>
+                        <p>Note: All possible U.S. river segments show up in blue once a certain zoom-level is reached.</p>
                         <h6><li>Await file upload completion</li></h6>
-                            <p>File must be uploaded and prepared for viewing. The status is shown above the upper-right corner of the map.</p>
+                        <p>File must be uploaded and prepared for viewing. The status is shown above the upper-right corner of the map.</p>
                         <h6><li>Once file is ready, click on segment(s).</li></h6>
-                            <p>
-                                Note: Nothing will happen when clicking unless the status reads "File is ready." <br>
-                                Multiple segments can be selected. For each segment selected:
-                            </p>
-                            <ul>
-                                <li>The selected segment is highlighted</li>
-                                <li>Associated information shows up in the left side panel.</li>
-                                <li>The associated netCDF data is plotted on a chart below the graph.</li>
-                            </ul>
+                        <p>
+                            Note: Nothing will happen when clicking unless the status reads "File is ready." <br>
+                            Multiple segments can be selected. For each segment selected:
+                        </p>
+                        <ul>
+                            <li>The selected segment is highlighted</li>
+                            <li>Associated information shows up in the left side panel.</li>
+                            <li>The associated netCDF data is plotted on a chart below the graph.</li>
+                        </ul>
                         <h6><li>Clear or Animate Selections</li></h6>
                     </ol>
                 </div>
@@ -61,14 +62,42 @@
 {% endblock %}
 
 {% block app_content %}
-<div id="file-info">
-    <div class="col-md-9" id="file-name"></div>
-    <div class="col-md-3" id="status"></div>
-</div>
-<div id="map-view"></div>
-<br><br>
+<div id="cesiumContainer"></div>
 <div id="info"></div>
-<br><br>
+<div id="map-buttons">
+    <div class="col-md-2" id="streams-toggle-group">{% gizmo toggle_switch riversToggle %}</div>
+
+    <div class="col-md-8">
+        <div class="col-md-2" id="select-view-button">
+            <div class="btn-group">
+                {% gizmo button btnSelectView %}
+            </div>
+        </div>
+        <div class="col-md-10 hidden" id="selection-buttons">{% gizmo button_group chartButtons %}</div>
+    </div>
+    <div class="col-md-2" id="labels-toggle-group">{% gizmo toggle_switch labelsToggle %}</div>
+</div>
+<div id="animation-buttons" class="hidden">
+    <div>
+        <p>Animate streams relative to:</p>
+        <form>
+            <input type="radio" name="color-scheme" class="radio-buttons" value="All" checked>All Selected Streams<br>
+            <input type="radio" name="color-scheme" class="radio-buttons" value="Individual">Individual Streams Themselves
+        </form>
+    </div>
+    <div id="animation-slider">
+        {% gizmo range_slider sldrAnimate %}
+    </div>
+    <button type="button" class="btn btn-success" id="play-button">
+        <span class="glyphicon glyphicon-play" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="btn btn-warning disabled" id="pause-button">
+        <span class="glyphicon glyphicon-pause " aria-hidden="true"></span>
+    </button>
+    <button type="button" class="btn btn-danger disabled" id="stop-button">
+        <span class="glyphicon glyphicon-stop" aria-hidden="true"></span>
+    </button>
+</div>
 <div id="nc-chart" class="hidden"></div>
 <div class="always-hidden">
     {% gizmo toggle_switch unitsToggle %}
@@ -81,12 +110,13 @@
 
 {% block scripts %}
 {{ block.super }}
+<script src="{% static 'nfie_data_viewer/vendor/cesium/Build/Cesium/Cesium.js' %}" type="text/javascript"></script>
 <script src="{% static 'nfie_data_viewer/vendor/openlayers3.8.2/ol.js' %}" type="text/javascript"></script>
 <script src="{% static 'nfie_data_viewer/vendor/highcharts4.1.7/hc.js' %}" type="text/javascript"></script>
 <script src="{% static 'nfie_data_viewer/vendor/highcharts4.1.7/hc-more.js' %}" type="text/javascript"></script>
 <script src="{% static 'nfie_data_viewer/vendor/highcharts4.1.7/exp.js' %}" type="text/javascript"></script>
 <script src="{% static 'nfie_data_viewer/vendor/WATERS/WATERSServices-1.0.0-min.js' %}"></script>
 <script type="text/javascript"
-     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDPgvDUpbEwcbg9C0cRTfDtDa-Vj4WBwI0">
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDPgvDUpbEwcbg9C0cRTfDtDa-Vj4WBwI0">
 </script>
 {% endblock %}

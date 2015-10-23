@@ -8,10 +8,10 @@ class NFIEDataViewer(TethysAppBase):
 
     name = 'NFIE Data Viewer'
     index = 'nfie_data_viewer:home'
-    icon = 'nfie_data_viewer/images/icon.gif'
+    icon = 'nfie_data_viewer/images/app-icon-logo.svg'
     package = 'nfie_data_viewer'
     root_url = 'nfie-data-viewer'
-    color = '#e74c3c'
+    color = '#b2b2ff'
         
     def url_maps(self):
         """
@@ -34,3 +34,4 @@ class NFIEDataViewer(TethysAppBase):
                     )
 
         return url_maps
+

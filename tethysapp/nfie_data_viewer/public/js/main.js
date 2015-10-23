@@ -1,61 +1,55 @@
 "use strict";
+// Variables related to the cesium globe
+var viewer, scene, layers, USRivers, selectedStreams = [], selectedLabels = [], tempPoints = [], globeClickListener, removeSelectionListener;
 
-//variables related to identifying source of redirection
-var params, prmstr, prmarr, tmparr;
+// Variables related to the netcdf chart
+var defaultChartSettings, chart, selectionCounter = 1;
 
-//variables related to the map
-var map, base_layer, all_streams_layer, selected_streams_layer;
-var flag_geocoded;
-
-//variables related to the delineation process
-var comid, fmeasure, gnis_name, wbd_huc12;
-
-//variables related to the netcdf chart
-var default_chart_settings, nc_chart, chart_data, plotCounter = 1;
+// Variables related to the animation
+var playAnimation, pauseAnimation, stopAnimation;
 
 //jQuery handles
 var infoDiv = $('#info');
-var chartButtons = $('#chart-buttons');
+var selectionButtons = $('#selection-buttons');
 var chartDiv =  $('#nc-chart');
 var statusDiv = $('#status');
-var popupDiv = $('#chart-popup');
-var searchOutput = $('#search_output');
+var popupDiv = $('#welcome-popup');
+var searchOutput = $('#search-output');
+var animationButtons = $('#animation-buttons');
+var menuBar = $('#app-content-wrapper');
 
 $(function () {
-    /*****************************
-     ***FIND REDIRECTION SOURCE***
-     *****************************/
-    function getSearchParameters() {
-        prmstr = window.location.search.substr(1);
-        return prmstr != null && prmstr != "" ? transformToAssocArray(prmstr) : {};
+
+    // Give this element an id so its style can be adjusted in main.css
+    $('#animation-slider').children().attr('id', 'slider');
+
+    // If the menu bar isn't showing, then show it
+    if (!menuBar.hasClass('show-nav')) {
+        menuBar.addClass('show-nav')
     }
+    // Change labels on Tethys Slider Gizmo created in controllers.py
+    $('.slider-before').text('Slow');
+    $('.slider-after').text('Fast');
 
-    function transformToAssocArray(prmstr) {
-        params = {};
-        prmarr = prmstr.split("&");
-        for (var i = 0; i < prmarr.length; i++) {
-            tmparr = prmarr[i].split("=");
-            params[tmparr[0]] = tmparr[1];
-        }
-        return params;
-    }
+    /********************************************
+     *****WAS A FILE PATH PASSED IN THE URL?*****
+     ********************************************/
+    var params = getSearchParameters();
 
-    params = getSearchParameters();
-
-    /***************************************
-     *****WAS A FILE PASSED IN THE URL?*****
-     ***************************************/
     if (params["src"] == undefined || params["src"] == null) {
-        //change welcome modal to show info about loading viewer from other app
-        $('#welcome-info').html('<p>This app redirects from either the Tethys NFIE iRODS Browser or HydroShare and is ' +
-                                'used to view RAPID Output NetCDF files in an interactive way. Without being redirected from one' +
-                                'of those sites, this app has little practical use since you cannot currently upload your own' +
-                                'RAPID Output NetCDF file. Please click the links to the resources above to browse their' +
-                                'file repositories. When locating an applicable NetCDF file, you will be given a "Open File' +
-                                'in Tethys Viewer" link that will redirect you here to view the chosen file. Good luck!');
-    } else {
 
-        //place filename in div so we know which file we're viewing
+        // Change welcome modal to show info about loading viewer from other app
+        $('#welcome-info').html('<p>This app redirects from either the <a href="../nfie-irods-explorer">Tethys NFIE iRODS Explorer</a> or ' +
+            '<a href="https://www.hydroshare.org">HydroShare</a> and is ' +
+            'used to view RAPID Output NetCDF files in an interactive way. Without being redirected from one ' +
+            'of those sites, this app has little practical use since you cannot currently upload your own ' +
+            'RAPID Output NetCDF file. Please click the links to the resources above to browse their ' +
+            'file repositories. When locating an applicable NetCDF file, you will be given a "Open File ' +
+            'in Tethys Viewer" link that will redirect you here to view the chosen file. Good luck!');
+    }
+    else {
+
+        // Place filename in menu bar so we know which file we're viewing
         var lastDash = params['res_id'].lastIndexOf('/');
         var fileName = params['res_id'].slice(lastDash + 1);
         $('#file-name').html('<p><strong>Your netCDF file:</strong> ' + fileName + '</p>');
@@ -68,163 +62,87 @@ $(function () {
             url: 'start-file-download',
             dataType: 'json',
             data: {
-                'file_id': params['res_id'],
-                'redirect_src': params['src']
+                'res_id': params['res_id'],
+                'src': params['src']
             },
             error: function (jqXHR, textStatus, errorThrown) {
                 statusDiv.html('<p class="error"><strong>' + errorThrown + '</strong></p>');
-                console.log(jqXHR);
-                console.log(textStatus);
-                console.log(errorThrown);
+                console.log(jqXHR + '\n' + textStatus + '\n' + errorThrown);
             },
             success: function (data) {
                 if ("error" in data) {
                     statusDiv.html('<p class="error"><strong>' + data['error'] + '</strong></p>');
                 }
                 else if ("success" in data) {
+
                     statusDiv.html('<p class="success"><strong>File is ready</strong></p>');
-                    map.on('click', function(evt) {
-                        flag_geocoded=false;
-                        var coordinate = evt.coordinate;
-                        var lonlat = ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326');
-                        reverse_geocode(lonlat);
-                        if (map.getView().getZoom()<12) {
-                            map.getView().setZoom(12);
-                            CenterMap(lonlat[1],lonlat[0]);
+
+                    // Hide menu bar .5 seconds after successfully downloading file
+                    setTimeout(function() {
+                        if (menuBar.hasClass('show-nav')) {
+                            $('.toggle-nav').trigger('click');
                         }
-                        //Each time the user clicks on the map, let's run the point
-                        //indexing service to show them the closest NHD reach segment.
-                        run_point_indexing_service(lonlat);
+                    }, 500);
+
+                    addGlobeClickEvent();
+
+                    camera.moveEnd.addEventListener(function() {
+                        var height = camera.positionCartographic.height;
+                        if (height < 50000) {
+                            $('#btnSelectView').removeClass('hidden');
+                        }
+                        else {
+                            $('#btnSelectView').addClass('hidden');
+                        }
                     });
                 }
             }
         });
-        statusDiv.html('<p class="wait">File is loading ' +
-                       '<img id="img-file-loading" src="/static/nfie_data_viewer/images/ajax-loader.gif"/></p>');
 
-        /****************************
-         ****SET ON-CLOSE FUNCTION****
-         ****************************/
-        window.onbeforeunload = function() {
-            $.ajax({
-                type: 'GET',
-                url: 'delete-file',
-                dataType: 'json',
-                error: function (jqXHR, textStatus, errorThrown) {
-                    console.log(jqXHR);
-                    console.log(textStatus);
-                    console.log(errorThrown);
-                },
-                success: function (data) {}
-            });
-        };
+        statusDiv.html('<p class="wait">File is loading ' +
+            '<img id="img-file-loading" src="/static/nfie_data_viewer/images/ajax-loader.gif"/></p>');
     }
 
-    //show welcome modal
+    // Show welcome modal
     popupDiv.modal('show');
 
     /**********************************
      ****INITIALIZE MAP AND LAYERS*****
      **********************************/
-    map = new ol.Map({
-        target: 'map-view',
-        view: new ol.View({
-            center: [-100, 40],
-            zoom: 3.5,
-            minZoom: 3,
-            maxZoom: 18
-        })
-    });
 
-    base_layer = new ol.layer.Tile({
-        source: new ol.source.BingMaps({
+    viewer = new Cesium.Viewer('cesiumContainer', {
+        imageryProvider : new Cesium.BingMapsImageryProvider({
+            url: '//dev.virtualearth.net',
             key: 'eLVu8tDRPeQqmBlKAjcw~82nOqZJe2EpKmqd-kQrSmg~AocUZ43djJ-hMBHQdYDyMbT-Enfsk0mtUIGws1WeDuOvjY4EXCH-9OK3edNLDgkc',
-            imagerySet: 'AerialWithLabels'
-        })
-	});
-
-    var createLineStyleFunction = function() {
-        return function(feature, resolution) {
-            var style = new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: '#ffff00',
-                    width: 2
-                }),
-                text: new ol.style.Text({
-                    textAlign: 'center',
-                    textBaseline: 'middle',
-                    font: 'bold 12px Verdana',
-                    text: getText(feature, resolution),
-                    fill: new ol.style.Fill({color: '#cc00cc'}),
-                    stroke: new ol.style.Stroke({color: 'black', width: 0.5})
-                })
-            });
-            return [style];
-        };
-    };
-
-    var getText = function(feature, resolution) {
-        var maxResolution = 100;
-        var text = feature.get('name');
-        if (resolution > maxResolution) {
-            text = '';
-        }
-        return text;
-    };
-
-    selected_streams_layer = new ol.layer.Vector({
-        source: new ol.source.Vector(),
-        style: createLineStyleFunction()
-    });
-
-    var serviceUrl = 'http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21_Labeled/MapServer/0';
-    var esrijsonFormat = new ol.format.EsriJSON();
-    var vectorSource = new ol.source.Vector({
-        loader: function(extent, resolution, projection) {
-            var url = serviceUrl + '/query/?f=json&geometry=' +
-                '{"xmin":' + extent[0] + ',"ymin":' + extent[1] + ',"xmax":' + extent[2] + ',"ymax":' + extent[3] +
-                    ',"spatialReference":{"wkid":102100}}&inSR=102100&outSR=102100';
-            $.ajax({url: url, dataType: 'jsonp', success: function(response) {
-                if (response.error) {
-                    alert(response.error.message + '\n' +
-                        response.error.details.join('\n'));
-                } else {
-                // dataProjection will be read from document
-                    var features = esrijsonFormat.readFeatures(response, {
-                        featureProjection: projection
-                    });
-                    if (features.length > 0) {
-                        vectorSource.addFeatures(features);
-                    }
-                }
-            }});
-        },
-        strategy: ol.loadingstrategy.tile(ol.tilegrid.createXYZ({
-            tileSize: 512
-        }))
-    });
-
-    all_streams_layer = new ol.layer.Vector({
-        source: vectorSource,
-        style: new ol.style.Style({
-            stroke: new ol.style.Stroke({
-                color: '#0000ff',
-                width: 2
-            })
+            mapStyle: Cesium.BingMapsStyle.AERIAL_WITH_LABELS
         }),
-        maxResolution: 100
+        baseLayerPicker: false,
+        fullscreenButton: false,
+        sceneModePicker: false,
+        animation: false,
+        timeline: false,
+        selectionIndicator: false,
+        infoBox: false
     });
+    scene = viewer.scene;
+    layers = scene.imageryLayers;
 
-    map.addLayer(base_layer);
-    map.addLayer(all_streams_layer);
-    map.addLayer(selected_streams_layer);
+    USRivers = layers.addImageryProvider(new Cesium.ArcGisMapServerImageryProvider({
+        url: 'http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer',
+        layers: '0',
+        tileWidth: 512,
+        tileHeight: 512
+    }));
 
-    find_current_location();
+    var camera = viewer.camera;
+
+    globeClickListener = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+    removeSelectionListener = new Cesium.ScreenSpaceEventHandler(scene.canvas);
 
     /****************************
      ******INITIALIZE CHART******
      ****************************/
-    default_chart_settings = {
+    defaultChartSettings = {
         title: {text: "Discharge Predictions Spanning 12 Hours"},
         chart: {
             zoomType: 'x'
@@ -233,6 +151,29 @@ $(function () {
             series: {
                 marker: {
                     enabled: false
+                },
+                events: {
+                    legendItemClick: function (event) {
+                        var unitsState = $('#units-toggle').bootstrapSwitch('state');
+                        var clickedSeries = event.currentTarget.name;
+                        if (clickedSeries == 'All') {
+                            updateChart(unitsState);
+                        }
+                        else {
+                            var seriesIndex = unitsState ? ((parseInt(clickedSeries) - 1) * 2) : ((parseInt(clickedSeries) * 2) - 1);
+                            var numSeries = chart.series.length;
+                            chart.yAxis[0].setExtremes(null, null);
+                            for (var i = 0; i < numSeries-1; i++) {
+                                if (i == seriesIndex) {
+                                    showSeries(i);
+                                } else {
+                                    (i % 2 == 0) ? hideSeries(i, unitsState) : hideSeries(i, !unitsState);
+                                }
+                            }
+                            chart.redraw();
+                        }
+                        return false;
+                    }
                 }
             }
         },
@@ -262,46 +203,211 @@ $(function () {
         }
     };
 
-    chartDiv.highcharts(default_chart_settings);
-    nc_chart = chartDiv.highcharts();
+    chartDiv.highcharts(defaultChartSettings);
+    chart = chartDiv.highcharts();
     $('#units-toggle').on('switchChange.bootstrapSwitch', function(event, state) {
         updateChart(state);
+    });
+
+    $('#rivers-toggle').on('switchChange.bootstrapSwitch', function(event, state) {
+        USRivers.show = state;
+    });
+
+    $('#labels-toggle').on('switchChange.bootstrapSwitch', function(event, state) {
+        var numLabels = selectedLabels.length;
+        for (var i=0; i < numLabels; i++) {
+            selectedLabels[i].show = state;
+        }
     });
 });
 
 /****************************
- ***MAP VIEW FUNCTIONALITY***
+ ****SET ON-CLOSE FUNCTION****
  ****************************/
+window.onbeforeunload = function() {
+    try {
+        $.ajax({
+            url: 'delete-file' //This is a UrlMap (setup in app.py) that calls the delete_file function in controllers.py
+        });
+    }
+    catch(err) {}
+};
 
-function find_current_location() {
-    navigator.geolocation.getCurrentPosition(function(position) {
-        var lat = position.coords.latitude;
-        var lon = position.coords.longitude;
-        CenterMap(lat,lon);
-        map.getView().setZoom(8);
-    });
+// Selects all streams in the view. This is called from the Select View button passed from controllers.py
+function selectView() {
+
+    // Get pixel coordinates (top left and bottom right) of current viewport
+    var ellipsoid = scene.globe.ellipsoid;
+    var pixelCoords = new Cesium.Cartesian2(0, 0);
+    var topLeft = scene.camera.pickEllipsoid(pixelCoords, ellipsoid);
+    pixelCoords = new Cesium.Cartesian2(scene.canvas.width, scene.canvas.height);
+    var bottomRight = scene.camera.pickEllipsoid(pixelCoords, ellipsoid);
+    pixelCoords = new Cesium.Cartesian2(0, scene.canvas.height);
+    var bottomLeft = scene.camera.pickEllipsoid(pixelCoords, ellipsoid);
+    pixelCoords = new Cesium.Cartesian2(scene.canvas.width, 0);
+    var topRight = scene.camera.pickEllipsoid(pixelCoords, ellipsoid);
+
+    // Convert pixel coordinates to cartographic coordinates and then to degrees
+    if (topLeft != null && bottomRight != null) {
+        topLeft = ellipsoid.cartesianToCartographic(topLeft);
+        var tlLongitude = Cesium.Math.toDegrees(topLeft.longitude);
+        var tlLatitude = Cesium.Math.toDegrees(topLeft.latitude);
+        bottomRight = ellipsoid.cartesianToCartographic(bottomRight);
+        var brLongitude = Cesium.Math.toDegrees(bottomRight.longitude);
+        var brLatitude = Cesium.Math.toDegrees(bottomRight.latitude);
+        bottomLeft = ellipsoid.cartesianToCartographic(bottomLeft);
+        var blLongitude = Cesium.Math.toDegrees(bottomLeft.longitude);
+        var blLatitude = Cesium.Math.toDegrees(bottomLeft.latitude);
+        topRight = ellipsoid.cartesianToCartographic(topRight);
+        var trLongitude = Cesium.Math.toDegrees(topRight.longitude);
+        var trLatitude = Cesium.Math.toDegrees(topRight.latitude);
+    }
+
+    // Create ArcGIS rest service geometry query parameter with required syntax
+    var geometry = '{"hasZ": false, "hasM": false, "rings": ' +
+        '[[[' + tlLongitude + ',' + tlLatitude + '],' +
+        '[' + trLongitude + ',' + trLatitude + '],' +
+        '[' + brLongitude + ',' + brLatitude + '],' +
+        '[' + blLongitude + ',' + blLatitude + '],' +
+        '[' + tlLongitude + ',' + tlLatitude + ']]], "spatialReference" : {"wkid" : 4326}}';
+
+
+    // Make JSON call to EPA streams layer to return stream vector geometry within the viewport
+    Cesium.jsonp('http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer/0/query',{
+        parameters: {
+            geometryType: "esriGeometryPolygon",
+            geometry: geometry,
+            outFields: 'COMID',
+            inSR: '{"wkid" : 4326}',
+            outSR: '{"wkid" : 4326}',
+            f: 'json'
+        }
+    })
+        .then(function(data) {
+            var numFeatures = data.features.length; // Number of returned features
+            var selectedCOMIDS = []; // Master array for the COMID of each feature
+            var entityCoords = []; // Master array For the coordinate array of each feature
+
+            for (var i = 0; i < numFeatures; i++) {
+                var coords = [];
+                var numCoordinates = data.features[i].geometry.paths[0].length;
+                var coordinates = data.features[i].geometry.paths[0];
+                for (var ii = 0; ii < numCoordinates; ii++) {
+                    coords.push(coordinates[ii][0]);
+                    coords.push(coordinates[ii][1]);
+                }
+                entityCoords.push(coords); // Add the array of coordinates to the master array
+                selectedCOMIDS.push(data.features[i].attributes.COMID); // Add the comid to the master array
+            }
+
+            getChartData(selectedCOMIDS, entityCoords);
+        })
 }
 
-function CenterMap(lat,lon){
-    var dbPoint = {
-        "type": "Point",
-        "coordinates": [lon, lat]
-    };
-    var coords = ol.proj.transform(dbPoint.coordinates, 'EPSG:4326','EPSG:3857');
-    map.getView().setCenter(coords);
+// This function is called from the Animate Selections tethys gizmo button imported from controllers.py
+function animateSelections() {
+
+    // Animation variables
+    var timeStep = 0; // This is a loop counter for the animation
+    var speed; // To hold the milliseconds that the loop will repeat on
+    var timeLoop; // A handle to the animation loop object
+    var sliderVal = parseInt($('#sldrAnimate').val()); // Gets value from the animation speed slider
+
+    // How fast should the animation run?
+    switch (sliderVal) {
+        case 1:
+            speed = 1666;
+            break;
+        case 2:
+            speed = 1333;
+            break;
+        case 3:
+            speed = 1000;
+            break;
+        case 4:
+            speed = 666;
+            break;
+        case 5:
+            speed = 333;
+            break;
+    }
+
+    //Get y-axis extents of charted data
+    var chartYmin = chart.yAxis[0].min;
+    var chartYmax = chart.yAxis[0].max;
+
+    // Lock the chart's Yaxis so it doesn't change when adding the time bar
+    chart.yAxis[0].setExtremes(chartYmin, chartYmax);
+
+    // Add a new time bar
+    var timeBar = chart.addSeries({
+        showInLegend: false,
+        redraw: false,
+        id: "timeBar"
+    });
+
+    // The object that holds the looping function. The loop runs until ClearInterval(timeLoop) is called
+    timeLoop = setInterval(function() {
+
+        var numStreams = selectedStreams.length;
+        var unitsState = $('#units-toggle').bootstrapSwitch('state');
+
+        if (playAnimation == true && pauseAnimation == false && stopAnimation == false) {
+
+            // The animation gets to the end and repeats after 12 loops
+            if (timeStep > 12) {
+                timeStep = 0;
+            }
+
+            var tickPosition = chart.xAxis[0].tickPositions;
+
+            timeBar.setData([[tickPosition[timeStep + 1], chartYmin], [tickPosition[timeStep + 1], chartYmax]]);
+            var dataSpan;
+            for (var streamIndex = 0; streamIndex < numStreams; streamIndex++) {
+                var seriesIndex = unitsState ? streamIndex*2 : (streamIndex*2)+1;
+                var currentVal = chart.series[seriesIndex].data[timeStep].y;
+
+                if ($("input:radio[name=color-scheme]:checked").val() == "Individual") {
+                    var seriesYmax = chart.series[seriesIndex].dataMax;
+                    lightness = currentVal / seriesYmax;
+                }
+                else {
+                    var lightness = currentVal / chartYmax;
+                }
+
+                selectedStreams[streamIndex].polyline.material = Cesium.Color.fromHsl((2/3), 1, 1-lightness, 1);
+                selectedStreams[streamIndex].polyline.width = 4 * lightness;
+            }
+            timeStep++;
+        }
+        else if (playAnimation == false && pauseAnimation == false && stopAnimation == true) {
+
+            // Change entity color back to yellow highlight
+            for (var i = 0; i < numStreams; i++) {
+                selectedStreams[i].polyline.material = Cesium.Color.YELLOW;
+                selectedStreams[i].polyline.width = 2;
+            }
+
+            // Release the chart's yAxis so it can be dynamic
+            chart.yAxis[0].setExtremes(null, null);
+
+            // Stop the loop from running
+            clearInterval(timeLoop);
+        }
+    }, speed);
 }
 
 /****************************************
  *********EPA WMS FUNCTIONALITY**********
  ****************************************/
-function run_point_indexing_service(lonlat) {
+function runPointIndexingService(lonlat) {
     var inputLon = lonlat[0];
     var inputLat = lonlat[1];
     var wktval = "POINT(" + inputLon + " " + inputLat + ")";
 
     var options = {
-        "success" : "pis_success",
-        "error"   : "pis_error",
+        "success" : "successPIS",
+        "error"   : "errorPIS",
         "timeout" : 60 * 1000
     };
 
@@ -316,310 +422,599 @@ function run_point_indexing_service(lonlat) {
         "optOutPrettyPrint": 0,
         "optClientRef": "CodePen"
     };
-    waiting_pis();
+    waitingPIS();
     WATERS.Services.PointIndexingService(data, options);
     /* The service runs and when it is done, it will call either the
-    success or error functions. So the actual actions upon success all
-    happen in the success function. */
+     success or error functions. So the actual actions upon success all
+     happen in the success function. */
 }
 
-function waiting_pis() {
+function waitingPIS() {
     searchOutput.append('<div class="search-output-loading">' +
         '<img id="loading-globe" src="http://www.epa.gov/waters/tools/globe_spinning_small.gif"></div>');
 }
 
-function pis_success(result, textStatus) {
+function successPIS(result) {
     $('.search-output-loading').remove();
-    var srv_rez = result.output;
-    if (srv_rez == null) {
+    var srvRez = result.output;
+    if (srvRez == null) {
         if ( result.status.status_message !== null ) {
-            report_failed_search(result.status.status_message);
+            reportFailedSearch(result.status.status_message);
         } else {
-            report_failed_search("No reach located near your click point.");
+            reportFailedSearch("No reach located near your click point.");
         }
         return;
     }
 
     //build output results text block for display
-    var srv_fl = result.output.ary_flowlines;
-    comid = srv_fl[0].comid.toString();
-    var reachcode = srv_fl[0].reachcode;
-    fmeasure = srv_fl[0].fmeasure.toFixed(2).toString();
-    gnis_name = srv_fl[0].gnis_name;
-    wbd_huc12 = srv_fl[0].wbd_huc12;
+    var srvFL = result.output.ary_flowlines;
+    var selectedCOMID = srvFL[0].comid.toString();
+    var reachCode = srvFL[0].reachcode;
+    var gnisName = srvFL[0].gnis_name;
+    var huc12 = srvFL[0].wbd_huc12;
     var selectionName = getSelectionName();
-    searchOutput.append('<div><strong>Info for ' + selectionName + ':</strong><br>' +
-        'Feature Name = ' + gnis_name + '<br>' +
-        'COMID = ' + comid + '<br>' +
-        'Reach Code = ' + reachcode + '<br>' +
-        'Measure = ' + fmeasure + ' meters<br>' +
-        'HUC 12 = ' + wbd_huc12 + '<br></div>');
 
-    //add the selected flow line to the map
-    for (var i in srv_fl){
-        selected_streams_layer.getSource().addFeature(geojson2feature(srv_fl[i].shape));
+    try {
+        //add the selected flow line to the map
+        var entityCoords = [];
+        var coords = [];
+        var numCoordinates = srvFL[0].shape.coordinates.length;
+        var coordinates = srvFL[0].shape.coordinates;
+        for (var ii = 0; ii < numCoordinates; ii++) {
+            coords.push(coordinates[ii][0]);
+            coords.push(coordinates[ii][1]);
+        }
+        entityCoords.push(coords);
+
+        searchOutput.append(
+            '<div><strong>Info for Selection ' + selectionName + ':</strong><br>' +
+            'Feature Name = ' + gnisName + '<br>' +
+            'COMID = ' + selectedCOMID + '<br>' +
+            'Reach Code = ' + reachCode + '<br>' +
+            'HUC 12 = ' + huc12 + '<br></div>'
+        );
+        getChartData(selectedCOMID, entityCoords);
     }
-
-    get_netcdf_chart_data(comid);
+    catch(err){}
 }
 
-function pis_error(XMLHttpRequest, textStatus, errorThrown) {
-    report_failed_search(textStatus);
+function errorPIS(XMLHttpRequest, textStatus, errorThrown) {
+    reportFailedSearch(textStatus);
 }
 
-function report_failed_search(MessageText){
+function reportFailedSearch(MessageText){
     //Set the message of the bad news
     searchOutput.append('<strong>Search Results:</strong><br>' + MessageText);
-    gnis_name = null;
-    map.getView().setZoom(4);
-}
-
-function geojson2feature(myGeoJSON) {
-    //Convert GeoJSON object into an OpenLayers 3 feature.
-    //Also force jquery coordinates into real js Array if needed
-    var geojsonformatter = new ol.format.GeoJSON;
-    if (myGeoJSON.coordinates instanceof Array == false) {
-        myGeoJSON.coordinates = WATERS.Utilities.RepairArray(myGeoJSON.coordinates,0);
-    }
-    var myGeometry = geojsonformatter.readGeometry(myGeoJSON);
-    myGeometry.transform('EPSG:4326','EPSG:3857');
-    //name the feature according to the selection number
-    var newFeatureName = getSelectionName();
-
-    return new ol.Feature({
-        geometry: myGeometry,
-        name: newFeatureName
-    });
-}
-
-/****************************************
- *****GOOGLE GEOCODER FUNCTIONALITY******
- ****************************************/
-
-function run_geocoder() {
-    var g = new google.maps.Geocoder();
-    var myAddress=document.getElementById('txtLocation').value;
-    g.geocode({'address': myAddress}, geocoder_success);
-}
-
-function geocoder_success(results, status) {
-    if (status == google.maps.GeocoderStatus.OK) {
-        flag_geocoded=true;
-        var Lat = results[0].geometry.location.lat();
-        var Lon = results[0].geometry.location.lng();
-
-        var dbPoint = {
-            "type": "Point",
-            "coordinates": [Lon, Lat]
-        };
-
-        var coords = ol.proj.transform(dbPoint.coordinates, 'EPSG:4326','EPSG:3857');
-        CenterMap(Lat,Lon);
-        map.getView().setZoom(12);
-    } else {
-        alert("Geocode was not successful for the following reason: " + status);
-    }
-}
-
-function reverse_geocode(coord){
-    var latlon = new google.maps.LatLng(coord[1],coord[0]);
-    var g = new google.maps.Geocoder();
-    g.geocode({'location':latlon}, reverse_geocode_success);
-}
-
-function reverse_geocode_success(results, status) {
-    if (status == google.maps.GeocoderStatus.OK) {
-        var location = results[1].formatted_address;
-        if (gnis_name != null) {
-            location = gnis_name + ", " + location;
-        }
-        document.getElementById("txtLocation").value = location;
-    } else {
-        document.getElementById("txtLocation").value = "Location Not Available";
-    }
-}
-//code calling this function was added to tethys gizmo button in controllers.py
-function handle_search_key(e) {
-    // This handles pressing the enter key to initiate the location search.
-    if (e.keyCode == 13) {
-        run_geocoder();
-    }
 }
 
 /****************************************
  *******BUILD CHART FUNCTIONALITY********
  ****************************************/
 
-function get_netcdf_chart_data(comid) {
+function getChartData(selectedCOMIDS, entityCoords) {
+
+    // If the "All" legend options exist, remove them so they can be placed as the last legend option again
+    if (chart.get('show-all') != null) {
+        chart.get('show-all').remove();
+    }
+
     infoDiv.html('<p><strong>Retrieving data for specific reach...' +
-                 '<img src="/static/nfie_data_viewer/images/ajax-loader.gif"/>' +
-                 '<p>This could take a moment</p>');
-    infoDiv.removeClass('hidden');
+        '<img src="/static/nfie_data_viewer/images/ajax-loader.gif"/>' +
+        '<p>This could take a moment</p>')
+        .removeClass('error hidden');
+
+    var queryCOMIDS;
+    if (selectedCOMIDS.constructor === Array) {
+        queryCOMIDS = selectedCOMIDS.join();
+    }
+    else {
+        queryCOMIDS = selectedCOMIDS;
+        selectedCOMIDS = selectedCOMIDS.split();
+    }
 
     $.ajax({
         type: 'GET',
         url: 'get-netcdf-data',
         dataType: 'json',
-        data: {'comid': comid },
+        data: {'comids': queryCOMIDS },
         error: function (jqXHR, textStatus, errorThrown) {
             infoDiv.html('<p><strong>An unknown error occurred while retrieving the data</strong></p>');
-            console.log(jqXHR);
-            console.log(textStatus);
-            console.log(errorThrown);
-            clearErrorSelection();
+            console.log(jqXHR + '\n' + textStatus + '\n' + errorThrown);
         },
         success: function (data) {
             if ("success" in data) {
+                infoDiv.addClass('hidden');
                 if ("return_data" in data) {
-                    chart_data = data.return_data;
-                    infoDiv.addClass('hidden');
-                    plotData(chart_data);
-                    plotData(convertTimeSeriesMetricToEnglish(chart_data));
-                    var state = $('#units-toggle').bootstrapSwitch('state');
-                    updateChart(state);
-                    if (chartDiv.hasClass('hidden')) {
-                        chartDiv.removeClass('hidden');
+                    var chartData = JSON.parse(data.return_data);
+                    var seriesCount = chartData.length;
+
+                    viewer.entities.suspendEvents();
+
+                    for (var i = 0; i < seriesCount; i++) {
+                        for (var key in chartData[i]) {
+                            if (chartData[i][key][0][1] != -9999) {
+                                addStreamsWithLabels(selectedCOMIDS[i], entityCoords[i]);
+                                var seriesData = chartData[i][key];
+                                plotData(seriesData);
+                                plotData(convertTimeSeriesMetricToEnglish(seriesData));
+                            }
+                        }
                     }
-                    if (chartButtons.hasClass('hidden')) {
-                        chartButtons.removeClass('hidden');
+
+                    viewer.entities.resumeEvents();
+
+                    chart.redraw();
+
+                    if (chart.series.length != 0) {
+                        var unitsState = $('#units-toggle').bootstrapSwitch('state');
+                        updateChart(unitsState);
+
+                        if (chartDiv.hasClass('hidden')) {
+                            chartDiv.removeClass('hidden');
+                            $(window).resize();
+                        }
+
+                        if (selectionButtons.hasClass('hidden')) {selectionButtons.removeClass('hidden')}
                     }
-                    $(window).resize();
                 }
-            } else if ("error" in data) {
-                infoDiv.html('<p><strong>' + data['error'] + '</strong></p>');
-                infoDiv.removeClass('hidden');
-                clearErrorSelection();
-            } else {
-                infoDiv.html('<p><strong>An unexplainable error occurred. Why? Who knows...</strong></p>');
-                infoDiv.removeClass('hidden');
-                clearErrorSelection();
+            }
+            else if ("error" in data) {
+                infoDiv
+                    .html('<strong>' + data['error'] + '</strong>')
+                    .removeClass('hidden')
+                    .addClass('error');
+
+                // Hide error message 2 seconds after showing it
+                setTimeout(function() {infoDiv.addClass('hidden')}, 2000);
+            }
+            else {
+                infoDiv
+                    .html('<p><strong>An unexplainable error occurred. Why? Who knows...</strong></p>')
+                    .removeClass('hidden');
+            }
+
+            if (chart.series.length > 2) {
+                // Add the "All" series options to the legend - one for metric, and one for english
+                var emptySeries = {
+                    name: "All",
+                    dashStyle: 'longdash',
+                    id: "show-all"
+                };
+                chart.addSeries(emptySeries, true);
             }
         }
     });
 }
 
-var convertTimeSeriesMetricToEnglish = function (time_series) {
-    var new_time_series = [];
-    var conversion_factor = 35.3146667;
-    time_series.map(function (data_row) {
-        var new_data_array = [data_row[0]];
-        for (var i = 1; i < data_row.length; i++) {
-            new_data_array.push(parseFloat((data_row[i] * conversion_factor).toFixed(5)));
+var convertTimeSeriesMetricToEnglish = function (timeSeries) {
+    var newTimeSeries = [];
+    var conversionFactor = 35.3146667;
+    timeSeries.map(function (dataRow) {
+        var newDataArray = [dataRow[0]];
+        for (var i = 1; i < dataRow.length; i++) {
+            newDataArray.push(parseFloat((dataRow[i] * conversionFactor).toFixed(5)));
         }
-        new_time_series.push(new_data_array);
+        newTimeSeries.push(newDataArray);
     });
-    return new_time_series;
+    return newTimeSeries;
 };
 
 var plotData = function(data) {
     var seriesName = getSelectionName();
-    var data_series = {
+    var dataSeries = {
         name: seriesName,
         data: data,
         dashStyle: 'longdash'
     };
-    nc_chart.addSeries(data_series);
-    plotCounter++;
+    chart.addSeries(dataSeries, false);
+    selectionCounter++;
 };
 
 function updateChart(state) {
-    var numSeries = nc_chart.series.length;
+    var numSeries = chart.series.length;
     var i;
     if (state == true) {
         for (i = 0; i < numSeries; i++) {
-            if (i % 2 == 0) {
-                showSeries(i);
-            } else {
-                hideSeries(i);
-            }
+            (i % 2 == 0) ? showSeries(i) : hideSeries(i);
         }
-        nc_chart.yAxis[0].axisTitle.attr({
+        chart.yAxis[0].axisTitle.attr({
             text: "Flow (cms)"
         })
     } else {
+        var ranOnce = false;
         for (i = 0; i < numSeries; i++) {
-            if (i % 2 == 0) {
-                hideSeries(i);
-            } else {
-                showSeries(i);
+            if (numSeries > 2 && !ranOnce) {
+                numSeries -= 1;
+                ranOnce = true;
             }
+            (i % 2 == 0) ? hideSeries(i) : showSeries(i);
         }
-        nc_chart.yAxis[0].axisTitle.attr({
+        chart.yAxis[0].axisTitle.attr({
             text: "Flow (cfs)"
         });
     }
+    chart.redraw();
 }
 
 
-function hideSeries(seriesNum) {
-    var item = nc_chart.series[seriesNum];
-    item.options.showInLegend = false;
-    item.legendItem = null;
-    nc_chart.legend.destroyItem(item);
-    nc_chart.legend.render();
-    nc_chart.series[seriesNum].hide();
+function hideSeries(seriesNum, showInLegend) {
+    // Set the default value for showInLegend
+    showInLegend = showInLegend===undefined ? false : showInLegend;
+
+    // Get the specified series and set legend options
+    var series = chart.series[seriesNum];
+    series.options.showInLegend = showInLegend;
+    series.legendItem = null;
+    chart.legend.destroyItem(series);
+    chart.legend.render();
+    chart.series[seriesNum].setVisible(false, false);
 }
 
 function showSeries(seriesNum) {
-    var item = nc_chart.series[seriesNum];
-    item.options.showInLegend = true;
-    nc_chart.legend.renderItem(item);
-    nc_chart.legend.render();
-    nc_chart.series[seriesNum].show();
+    // Get the specified series and set legend options
+    var series = chart.series[seriesNum];
+    series.options.showInLegend = true;
+    chart.legend.renderItem(series);
+    chart.legend.render();
+    chart.series[seriesNum].setVisible(true, false);
 }
 
 /****************************************
- ***INTERACTIVE BUTTONS FUNCTIONALITY****
+ ****ADD/REMOVE BUTTONS FUNCTIONALITY****
  ****************************************/
 
 function toggleUnitsButton() {
     $('#units-toggle').bootstrapSwitch('toggleState', false);
 }
-//code calling this function was added to tethys gizmo button in controllers.py
-function clearLastSelection() {
+
+function zoomToSelection() {
+    viewer.flyTo(viewer.entities);
+}
+
+// Code calling this function was added as part of Tethys-Gizmo button in controllers.py
+function removeLastSelection() {
+    // Clear the info in the menu bar search output div
     if (searchOutput.children() != []) {
         searchOutput.children().last().remove()
     }
-    var numSeries = nc_chart.series.length;
+
+    // Remove series data corresponding to last selection
+    var numSeries = chart.series.length;
     if (numSeries > 0) {
-        nc_chart.series[numSeries - 1].remove(); //remove cms series
-        plotCounter--;
-        nc_chart.series[numSeries - 2].remove(); //remove cfs series
-        plotCounter--;
+        if (chart.series.length == 2) {
+            removeAllSelections();
+        }
+        else if (numSeries == 5) {
+            chart.series[numSeries - 1].remove(); // Remove "All" legend item (only shown with two or more streams selected)
+            chart.series[numSeries - 2].remove(); // Remove cfs series
+            chart.series[numSeries - 3].remove(); // Remove cms series
+        }
+        else {
+            chart.series[numSeries - 2].remove(); // Remove cfs series, keep "All" legend item
+            chart.series[numSeries - 3].remove(); // Remove cms series, keep "All" legend item
+        }
+
+        selectionCounter -= 2;
     }
-    var numFeatures = selected_streams_layer.getSource().getFeatures().length;
-    if (numFeatures > 0) {
-        var lastFeature = selected_streams_layer.getSource().getFeatures()[numFeatures - 1];
-        selected_streams_layer.getSource().removeFeature(lastFeature);
+
+    // Remove last-selected stream segment
+    if (selectedStreams != []) {
+        viewer.entities.remove(selectedStreams.pop());
+        viewer.entities.remove(selectedLabels.pop());
     }
+
+    $(window).resize();
 }
 
-function clearErrorSelection() {
-    searchOutput.children().last().remove();
-    var numFeatures = selected_streams_layer.getSource().getFeatures().length;
-    var lastFeature = selected_streams_layer.getSource().getFeatures()[numFeatures-1];
-    selected_streams_layer.getSource().removeFeature(lastFeature);
-}
-//code calling this function was added to tethys gizmo button in controllers.py
-function clearSelections() {
-    while(nc_chart.series.length > 0) {
-        nc_chart.series[0].remove();
-    }
-    selected_streams_layer.getSource().clear();
-    plotCounter = 1;
+// Code calling this function was added to Tethys Gizmo button in controllers.py
+function removeAllSelections() {
+
+    //Hide chart
+    chartDiv.addClass('hidden');
+
+    // Remove all series from chart with redraw set to false (to be called manually after all removals)
+    while(chart.series.length > 0) {chart.series[0].remove(false)}
+
+    // Remove all stream segments and labels
+    viewer.entities.suspendEvents();
+    viewer.entities.removeAll();
+    viewer.entities.resumeEvents();
+    selectedStreams = [];
+    selectedLabels = [];
+
+    // Clear search output and info divs
     searchOutput.html('');
+    infoDiv.html('');
+
+    // Hide selection buttons
+    selectionButtons.addClass('hidden');
+    animationButtons.addClass('hidden');
+    $('[name="btnAnimateFlow"]').removeClass('active');
+
+    // Reset selection counter
+    selectionCounter = 1;
+
+    $(window).resize();
+}
+
+function removeSelection() {
+    if (selectedStreams.length == 0) {
+        $('#btnRemoveSelection').removeClass('active');
+
+        alert('Sorry. There are no selections to remove.');
+    }
+    else if ($('#btnRemoveSelection').hasClass('active')) {
+        $('#clearAll, #clearLast, #btnSelectView, [name="btnAnimateFlow"]').removeClass('disabled');
+        $('#btnRemoveSelection').removeClass('active');
+
+        removeSelectionListener.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        addGlobeClickEvent();
+    }
+    else {
+        $('#btnRemoveSelection').addClass('active');
+        $('#clearAll, #clearLast, #btnSelectView, [name="btnAnimateFlow"]').addClass('disabled');
+
+        globeClickListener.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        removeSelectionListener.setInputAction(function(click) {
+            var pickedObject = scene.pick(click.position);
+            if (Cesium.defined(pickedObject)) {
+                var selectionLabel;
+                var selectionCOMID;
+                var selectionID = pickedObject.id._id;
+                var objectIsLabel = selectionID.indexOf('label') > -1;
+                if (objectIsLabel) {
+                    selectionLabel = viewer.entities.getById(selectionID);
+                    selectionCOMID = selectionID.slice(0, selectionID.indexOf('label'));
+                }
+                else {
+                    selectionLabel = viewer.entities.getById(selectionID.toString() + "label");
+                }
+                var selectionNumber = parseInt(selectionLabel.label.text._value);
+                var seriesIndex = (selectionNumber * 2) - 2;
+                var series;
+                var currVal;
+                var removeStream;
+                var removeLabel;
+
+                // Remove corresponding chart series and their legend items
+                series = chart.series[seriesIndex];
+                chart.legend.destroyItem(series);
+                chart.series[seriesIndex].remove();
+
+                series = chart.series[seriesIndex];
+                chart.legend.destroyItem(series);
+                chart.series[seriesIndex].remove();
+
+                // Remove corresponding stream and its label
+                removeStream = viewer.entities.getById(selectionCOMID);
+                removeLabel = viewer.entities.getById(selectionCOMID.toString() + "label");
+                selectedStreams.splice(selectedStreams.indexOf(removeStream), 1);
+                selectedLabels.splice(selectedLabels.indexOf(removeLabel), 1);
+                viewer.entities.removeById(selectionCOMID);
+                viewer.entities.removeById(selectionCOMID.toString() + "label");
+
+                // Re-name (re-number) all of the labels
+                for (var label in selectedLabels) {
+                    currVal = parseInt(selectedLabels[label].label.text._value);
+                    if (currVal > selectionNumber) {
+                        selectedLabels[label].label.text._value = (currVal - 1).toString();
+                    }
+                }
+
+                // Re-name (re-number) all of the chart series
+                for (var item in chart.series) {
+                    currVal = parseInt(chart.series[item].name);
+                    if (!(isNaN(currVal))) {
+                        if (currVal > selectionNumber) {
+                            var newName = (currVal - 1).toString();
+                            chart.series[item].update(
+                                {
+                                    name:newName,
+                                    index: parseInt(item)
+                                }, false);
+                        }
+                        else {
+                            chart.series[item].update({index: parseInt(item)}, false);
+                        }
+                    }
+                    else {
+                        chart.series[item].update({index: parseInt(item)}, false);
+                    }
+                }
+
+                var unitsState = $('#units-toggle').bootstrapSwitch('state');
+                updateChart(unitsState);
+
+                if (selectedStreams.length == 0) {
+                    chart.series[0].remove(); // Remove the "All" legend item
+                    chart.redraw();
+
+                    // Hide selection buttons
+                    selectionButtons.addClass('hidden');
+                    animationButtons.addClass('hidden');
+                    $('[name="btnAnimateFlow"]').removeClass('active');
+                    $('#btnRemoveSelection').removeClass('active');
+
+                    removeSelectionListener.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                    addGlobeClickEvent();
+                }
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    }
 }
 
 /****************************************
  *********GLOBAL FUNCTIONALITY**********
  ****************************************/
 
-function getSelectionName() {
-    var selectionName;
-    if (plotCounter % 2 == 0) {
-        selectionName = "Selection " + (plotCounter / 2);
-    } else {
-        selectionName = "Selection " + ((plotCounter / 2) + 0.5);
+function addStreamsWithLabels(selectedCOMID, entityCoords) {
+    // Add stream segment
+    try {
+        selectedStreams.push(viewer.entities.add({
+            id: selectedCOMID,
+            polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray(entityCoords),
+                width: 2,
+                material: Cesium.Color.YELLOW
+            }
+        }));
+
+        // Get coordinates of midpoint of stream segment to add Label to midpoint
+        var midPoint = entityCoords.length / 2;
+        var midIndex = midPoint % 2 == 0 ? midPoint : midPoint + 1;
+
+        // Check if labels should be shown or not
+        var showLabels = $('#labels-toggle').bootstrapSwitch('state');
+
+        // Add label to stream
+        selectedLabels.push(viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(entityCoords[midIndex], entityCoords[midIndex + 1]),
+            label: {
+                text: getSelectionName(),
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                outlineWidth: 2
+            },
+            id: (selectedCOMID.toString() + "label"),
+            show: showLabels
+        }));
     }
-    return selectionName;
+    catch (err) {}
+}
+
+// Keeps track of how many selections have been added to get next label name
+function getSelectionName() {
+    return (selectionCounter % 2 == 0) ? (selectionCounter / 2).toString() : ((selectionCounter / 2) + 0.5).toString();
+}
+
+/*************************************************
+ *********ANIMATION BUTTONS FUNCTIONALITY*********
+ *************************************************/
+
+function bindPlayClickEvent() {
+    $('#play-button').one('click', function() {
+        // Remove globe click listener
+        globeClickListener.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        // Start animation
+        animateSelections();
+
+        // Bind a one-time click event to the stop button
+        bindStopClickEvent();
+    })
+}
+
+function bindStopClickEvent() {
+    $('#stop-button').one('click', function (){
+        // Activate previously disabled buttons
+        $('#clearAll, #clearLast, #btnSelectView').removeClass('disabled');
+        $('#sldrAnimate').removeAttr('disabled');
+        $('#pause-button, #stop-button').addClass('disabled');
+        $('.radio-buttons').each(function(){this.disabled = false;});
+
+        // Re-activate 'Change Units' button functionality on chart
+        $('#units-toggle').on('switchChange.bootstrapSwitch', function(event, state) {
+            updateChart(state);
+        });
+
+        // Set button boolean states
+        playAnimation = false;
+        pauseAnimation = false;
+        stopAnimation = true;
+
+        // Remove the time bar
+        chart.get("timeBar").remove();
+
+        //Rebind the globe click event
+        addGlobeClickEvent();
+
+        // Rebind another single play click event
+        bindPlayClickEvent();
+    });
+}
+
+$('#play-button')
+    .one('click', function() {
+        bindPlayClickEvent();
+        $('#play-button').trigger('click');
+    })
+    .on('click', function() {
+        //Disable all buttons that would interfere with animation
+        $('#clearAll, #clearLast, #btnSelectView').addClass('disabled');
+        $('#sldrAnimate').attr('disabled', true);
+        $('#pause-button, #stop-button').removeClass('disabled');
+        $('.radio-buttons').each(function(){this.disabled = true;})
+
+        // De-activate 'Change Units' button functionality on chart
+        $('#units-toggle').off('switchChange.bootstrapSwitch');
+
+        // Set button boolean states
+        pauseAnimation = false;
+        stopAnimation = false;
+        playAnimation = true;
+    });
+
+$('#pause-button').on('click', function (){
+    // Pause can only be pressed once
+    $('#pause-button').addClass('disabled');
+
+    // Set button boolean states
+    playAnimation = false;
+    stopAnimation = false;
+    pauseAnimation = true;
+});
+
+function showAnimationTools() {
+    // If a selection has been made, show buttons, else alert user to make a selection
+    if (chart.series.length != 0) {
+
+        // Allow the animation tools to be toggled on and off
+        if (animationButtons.hasClass('hidden')) {
+            animationButtons.removeClass('hidden');
+            $('[name="btnAnimateFlow"]').addClass('active');
+        }
+        else {
+            $('[name="btnAnimateFlow"]').removeClass('active');
+            animationButtons.addClass('hidden');
+        }
+    }
+    else {
+        alert("Please make a selection first");
+    }
+}
+
+function addGlobeClickEvent() {
+    globeClickListener.setInputAction(function(click) {
+        var ellipsoid = scene.globe.ellipsoid;
+        var cartesian = viewer.camera.pickEllipsoid(click.position, ellipsoid);
+        if (cartesian) {
+            var cartographic = ellipsoid.cartesianToCartographic(cartesian);
+            var longitude = Cesium.Math.toDegrees(cartographic.longitude);
+            var latitude = Cesium.Math.toDegrees(cartographic.latitude);
+            var lonlat = [];
+            lonlat.push(longitude);
+            lonlat.push(latitude);
+
+            runPointIndexingService(lonlat);
+        }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
+/*****************************
+ ***FIND REDIRECTION SOURCE***
+ *****************************/
+function getSearchParameters() {
+    var prmstr = window.location.search.substr(1);
+    return prmstr != null && prmstr != "" ? transformToAssocArray(prmstr) : {};
+}
+
+function transformToAssocArray(prmstr) {
+    var params = {};
+    var prmarr = prmstr.split("&");
+    for (var i = 0; i < prmarr.length; i++) {
+        var tmparr = prmarr[i].split("=");
+        params[tmparr[0]] = tmparr[1];
+    }
+    return params;
 }
