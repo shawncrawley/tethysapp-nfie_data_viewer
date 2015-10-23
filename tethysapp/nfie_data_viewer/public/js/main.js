@@ -516,6 +516,7 @@ function getChartData(selectedCOMIDS, entityCoords) {
         type: 'GET',
         url: 'get-netcdf-data',
         dataType: 'json',
+        contentType: false,
         data: {'comids': queryCOMIDS },
         error: function (jqXHR, textStatus, errorThrown) {
             infoDiv.html('<p><strong>An unknown error occurred while retrieving the data</strong></p>');
