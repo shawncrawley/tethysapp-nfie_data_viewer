@@ -762,7 +762,7 @@ function removeSelection() {
             if (Cesium.defined(pickedObject)) {
                 var selectionLabel;
                 var selectionCOMID;
-                var selectionID = pickedObject.id._id;
+                var selectionID = pickedObject.id._id.toString();
                 var objectIsLabel = selectionID.indexOf('label') > -1;
                 if (objectIsLabel) {
                     selectionLabel = viewer.entities.getById(selectionID);
@@ -770,6 +770,7 @@ function removeSelection() {
                 }
                 else {
                     selectionLabel = viewer.entities.getById(selectionID.toString() + "label");
+                    selectionCOMID = selectionID;
                 }
                 var selectionNumber = parseInt(selectionLabel.label.text._value);
                 var seriesIndex = (selectionNumber * 2) - 2;
