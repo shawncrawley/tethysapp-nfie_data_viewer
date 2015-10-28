@@ -90,11 +90,11 @@ $(function () {
                         var height = camera.positionCartographic.height;
                         if (height < 50000) {
                             $('#btnSelectView').removeClass('hidden');
-                            $('#info-text').addClass('hidden');
+                            $('#zoom-info-text').addClass('hidden');
                         }
                         else {
                             $('#btnSelectView').addClass('hidden');
-                            $('#info-text').removeClass('hidden');
+                            $('#zoom-info-text').removeClass('hidden');
                         }
                     });
                 }
@@ -570,6 +570,7 @@ function processSelections(selectedCOMIDS, entityCoords) {
 
                         if (selectionButtons.hasClass('hidden')) {
                             selectionButtons.removeClass('hidden')
+                            $('#select-info-text').addClass('hidden');
                         }
                     }
                 }
@@ -738,6 +739,7 @@ function removeAllSelections() {
 
     // Hide selection buttons
     selectionButtons.addClass('hidden');
+    $('#select-info-text').removeClass('hidden');
     animationButtons.addClass('hidden');
     $('[name="btnAnimateFlow"]').removeClass('active');
 
@@ -844,6 +846,7 @@ function removeSelection() {
 
                     // Hide selection buttons
                     selectionButtons.addClass('hidden');
+                    $('#select-info-text').removeClass('hidden');
                     animationButtons.addClass('hidden');
                     $('[name="btnAnimateFlow"]').removeClass('active');
                     $('#btnRemoveSelection').removeClass('active');

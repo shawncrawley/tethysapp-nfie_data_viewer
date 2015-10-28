@@ -69,12 +69,15 @@
 
     <div class="col-md-8">
         <div class="col-md-2" id="select-view-button">
-            <div id="info-text">Zoom in for 'Select View' option</div>
+            <div class="info-text" id="zoom-info-text">Zoom in for 'Select View' option</div>
             <div class="btn-group">
                 {% gizmo button btnSelectView %}
             </div>
         </div>
-        <div class="col-md-10 hidden" id="selection-buttons">{% gizmo button_group chartButtons %}</div>
+        <div class="col-md-10">
+            <div class="info-text" id="select-info-text">Or click on river segment of choice</div>
+            <div class="hidden" id="selection-buttons">{% gizmo button_group chartButtons %}</div>
+        </div>
     </div>
     <div class="col-md-2" id="labels-toggle-group">{% gizmo toggle_switch labelsToggle %}</div>
 </div>

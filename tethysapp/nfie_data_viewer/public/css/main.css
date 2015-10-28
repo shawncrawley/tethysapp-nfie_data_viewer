@@ -67,10 +67,10 @@ h6 {
 #streams-toggle-group, #labels-toggle-group {
     margin-top: 6px;
 }
-#info-text {
+.info-text {
     text-align: center;
     vertical-align: middle;
-    font-size: 10px;
+    font-size: 12px;
     background-color: #b2b2ff;
     color: white;
     margin-top: 3px;
