@@ -128,10 +128,10 @@ $(function () {
     layers = scene.imageryLayers;
 
     USRivers = layers.addImageryProvider(new Cesium.ArcGisMapServerImageryProvider({
-        url: 'http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer',
+        url: 'http://141.142.168.31/arcgis/rest/services/hydro/NFIEGeoNational_flowline/MapServer',
         layers: '0',
-        tileWidth: 512,
-        tileHeight: 512
+        tileWidth: 256,
+        tileHeight: 256
     }));
 
     var camera = viewer.camera;
