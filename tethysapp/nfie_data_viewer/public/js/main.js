@@ -90,9 +90,11 @@ $(function () {
                         var height = camera.positionCartographic.height;
                         if (height < 50000) {
                             $('#btnSelectView').removeClass('hidden');
+                            $('#info-text').addClass('hidden');
                         }
                         else {
                             $('#btnSelectView').addClass('hidden');
+                            $('#info-text').removeClass('hidden');
                         }
                     });
                 }
@@ -376,7 +378,6 @@ function animateSelections() {
                 }
 
                 selectedStreams[streamIndex].polyline.material = Cesium.Color.fromHsl((2/3), 1, 1-lightness, 1);
-                selectedStreams[streamIndex].polyline.width = 4 * lightness;
             }
             timeStep++;
         }
