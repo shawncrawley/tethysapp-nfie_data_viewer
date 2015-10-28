@@ -300,7 +300,7 @@ function selectView() {
                 selectedCOMIDS.push(data.features[i].attributes.COMID); // Add the comid to the master array
             }
 
-            getChartData(selectedCOMIDS, entityCoords);
+            processSelections(selectedCOMIDS, entityCoords);
         })
 }
 
@@ -473,7 +473,7 @@ function successPIS(result) {
             'Reach Code = ' + reachCode + '<br>' +
             'HUC 12 = ' + huc12 + '<br></div>'
         );
-        getChartData(selectedCOMID, entityCoords);
+        processSelections(selectedCOMID, entityCoords);
     }
     catch(err){}
 }
@@ -491,7 +491,7 @@ function reportFailedSearch(MessageText){
  *******BUILD CHART FUNCTIONALITY********
  ****************************************/
 
-function getChartData(selectedCOMIDS, entityCoords) {
+function processSelections(selectedCOMIDS, entityCoords) {
 
     // If the "All" legend options exist, remove them so they can be placed as the last legend option again
     if (chart.get('show-all') != null) {
@@ -503,88 +503,96 @@ function getChartData(selectedCOMIDS, entityCoords) {
         '<p>This could take a moment</p>')
         .removeClass('error hidden');
 
-    var queryCOMIDS;
-    if (selectedCOMIDS.constructor === Array) {
-        queryCOMIDS = selectedCOMIDS.join();
-    }
-    else {
-        queryCOMIDS = selectedCOMIDS;
+    if (selectedCOMIDS.constructor !== Array) {
         selectedCOMIDS = selectedCOMIDS.split();
     }
 
-    $.ajax({
-        type: 'GET',
-        url: 'get-netcdf-data',
-        dataType: 'json',
-        contentType: false,
-        data: {'comids': queryCOMIDS },
-        error: function (jqXHR, textStatus, errorThrown) {
-            infoDiv.html('<p><strong>An unknown error occurred while retrieving the data</strong></p>');
-            console.log(jqXHR + '\n' + textStatus + '\n' + errorThrown);
-        },
-        success: function (data) {
-            if ("success" in data) {
-                infoDiv.addClass('hidden');
-                if ("return_data" in data) {
-                    var chartData = JSON.parse(data.return_data);
-                    var seriesCount = chartData.length;
+    var queryCOMIDS = [];
+    var numCOMIDS = selectedCOMIDS.length;
+    var totalLoops = Math.ceil(numCOMIDS/50);
+    for (var i = 0; i < totalLoops; i++) {
+        queryCOMIDS.push([]);
+    }
+    var loop = 0;
+    for (var index = 0; index < numCOMIDS; index++) {
+        loop = Math.floor(index/50);
+        queryCOMIDS[loop].push(selectedCOMIDS[index]);
+    }
 
-                    viewer.entities.suspendEvents();
+    viewer.entities.suspendEvents();
 
-                    for (var i = 0; i < seriesCount; i++) {
-                        for (var key in chartData[i]) {
-                            if (chartData[i][key][0][1] != -9999) {
-                                addStreamsWithLabels(selectedCOMIDS[i], entityCoords[i]);
-                                var seriesData = chartData[i][key];
-                                plotData(seriesData);
-                                plotData(convertTimeSeriesMetricToEnglish(seriesData));
+    // Number of requests currently executed
+    var iRequest = 0;
+    var sendData = queryCOMIDS[iRequest].join();
+
+    queryChartData(sendData, totalLoops);
+
+    function queryChartData(iSendData, totalRequests) {
+        $.ajax({
+            type: 'GET',
+            url: 'get-netcdf-data/',
+            contentType: 'text',
+            dataType: 'json',
+            data: {'comids': iSendData},
+            error: function (jqXHR, textStatus, errorThrown) {
+                infoDiv.html('<p><strong>An unknown error occurred while retrieving the data</strong></p>');
+                console.log(jqXHR.responseText + '\n' + textStatus + '\n' + errorThrown);
+            },
+            success: function (data) {
+                if ("success" in data) {
+                    if ("return_data" in data) {
+                        var chartData = JSON.parse(data.return_data);
+                        var seriesCount = chartData.length;
+
+                        for (var i = 0; i < seriesCount; i++) {
+                            for (var key in chartData[i]) {
+                                if (chartData[i][key][0][1] != -9999) {
+                                    var actualIndex = (iRequest * 50) + i;
+                                    addStreamsWithLabels(selectedCOMIDS[actualIndex], entityCoords[actualIndex]);
+                                    var seriesData = chartData[i][key];
+                                    plotData(seriesData);
+                                    plotData(convertTimeSeriesMetricToEnglish(seriesData));
+                                }
                             }
                         }
                     }
+                    iRequest++;
+                    if (iRequest < totalRequests) {
+                        queryChartData(queryCOMIDS[iRequest].join(), totalRequests);
+                    }
+                    else {
+                        infoDiv.addClass('hidden');
+                        // Show selected streams, chart, and selection buttons
+                        viewer.entities.resumeEvents();
 
-                    viewer.entities.resumeEvents();
+                        showChart();
 
-                    chart.redraw();
-
-                    if (chart.series.length != 0) {
-                        var unitsState = $('#units-toggle').bootstrapSwitch('state');
-                        updateChart(unitsState);
-
-                        if (chartDiv.hasClass('hidden')) {
-                            chartDiv.removeClass('hidden');
-                            $(window).resize();
+                        if (selectionButtons.hasClass('hidden')) {
+                            selectionButtons.removeClass('hidden')
                         }
-
-                        if (selectionButtons.hasClass('hidden')) {selectionButtons.removeClass('hidden')}
                     }
                 }
-            }
-            else if ("error" in data) {
-                infoDiv
-                    .html('<strong>' + data['error'] + '</strong>')
-                    .removeClass('hidden')
-                    .addClass('error');
+                else if ("error" in data) {
+                    viewer.entities.resumeEvents();
+                    infoDiv
+                        .html('<strong>' + data['error'] + '</strong>')
+                        .removeClass('hidden')
+                        .addClass('error');
 
-                // Hide error message 2 seconds after showing it
-                setTimeout(function() {infoDiv.addClass('hidden')}, 2000);
+                    // Hide error message 2 seconds after showing it
+                    setTimeout(function () {
+                        infoDiv.addClass('hidden')
+                    }, 2000);
+                }
+                else {
+                    viewer.entities.resumeEvents();
+                    infoDiv
+                        .html('<p><strong>An unexplainable error occurred. Why? Who knows...</strong></p>')
+                        .removeClass('hidden');
+                }
             }
-            else {
-                infoDiv
-                    .html('<p><strong>An unexplainable error occurred. Why? Who knows...</strong></p>')
-                    .removeClass('hidden');
-            }
-
-            if (chart.series.length > 2) {
-                // Add the "All" series options to the legend - one for metric, and one for english
-                var emptySeries = {
-                    name: "All",
-                    dashStyle: 'longdash',
-                    id: "show-all"
-                };
-                chart.addSeries(emptySeries, true);
-            }
-        }
-    });
+        });
+    }
 }
 
 var convertTimeSeriesMetricToEnglish = function (timeSeries) {
@@ -1019,4 +1027,28 @@ function transformToAssocArray(prmstr) {
         params[tmparr[0]] = tmparr[1];
     }
     return params;
+}
+
+function showChart() {
+    if (chart.series.length > 2) {
+        // Add the "All" series options to the legend - one for metric, and one for english
+        var emptySeries = {
+            name: "All",
+            dashStyle: 'longdash',
+            id: "show-all"
+        };
+        chart.addSeries(emptySeries, false);
+    }
+
+    chart.redraw();
+
+    if (chart.series.length != 0) {
+        var unitsState = $('#units-toggle').bootstrapSwitch('state');
+        updateChart(unitsState);
+
+        if (chartDiv.hasClass('hidden')) {
+            chartDiv.removeClass('hidden');
+            $(window).resize();
+        }
+    }
 }

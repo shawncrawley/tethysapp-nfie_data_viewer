@@ -134,7 +134,7 @@ def start_file_download(request):
                 data_nc = nc.Dataset(local_file_path, mode="r")
 
             elif get_data['src'] == 'hs':
-                auth = HydroShareAuthBasic(username='*****', password='*****')
+                auth = HydroShareAuthBasic(username='username', password='*****')
                 hs = HydroShare(auth=auth, hostname="playground.hydroshare.org", use_https=False)
                 resource_data = hs.getSystemMetadata(file_path)
                 filename = resource_data['resource_title']
