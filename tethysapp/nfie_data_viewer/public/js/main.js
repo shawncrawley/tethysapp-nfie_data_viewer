@@ -10,7 +10,7 @@ var playAnimation, pauseAnimation, stopAnimation;
 
 //jQuery handles
 var infoDiv = $('#info');
-var selectionButtons = $('#selection-buttons');
+var selectionButtons = $('#remove-buttons, #view-buttons');
 var chartDiv =  $('#nc-chart');
 var statusDiv = $('#status');
 var popupDiv = $('#welcome-popup');
@@ -364,7 +364,7 @@ function animateSelections() {
             var tickPosition = chart.xAxis[0].tickPositions;
 
             timeBar.setData([[tickPosition[timeStep + 1], chartYmin], [tickPosition[timeStep + 1], chartYmax]]);
-            var dataSpan;
+
             for (var streamIndex = 0; streamIndex < numStreams; streamIndex++) {
                 var seriesIndex = unitsState ? streamIndex*2 : (streamIndex*2)+1;
                 var currentVal = chart.series[seriesIndex].data[timeStep].y;
@@ -569,7 +569,7 @@ function processSelections(selectedCOMIDS, entityCoords) {
                         showChart();
 
                         if (selectionButtons.hasClass('hidden')) {
-                            selectionButtons.removeClass('hidden')
+                            selectionButtons.removeClass('hidden');
                             $('#select-info-text').addClass('hidden');
                         }
                     }
@@ -776,6 +776,7 @@ function removeSelection() {
                 var selectionCOMID;
                 var selectionID = pickedObject.id._id.toString();
                 var objectIsLabel = selectionID.indexOf('label') > -1;
+
                 if (objectIsLabel) {
                     selectionLabel = viewer.entities.getById(selectionID);
                     selectionCOMID = selectionID.slice(0, selectionID.indexOf('label'));
@@ -784,6 +785,7 @@ function removeSelection() {
                     selectionLabel = viewer.entities.getById(selectionID.toString() + "label");
                     selectionCOMID = selectionID;
                 }
+
                 var selectionNumber = parseInt(selectionLabel.label.text._value);
                 var seriesIndex = (selectionNumber * 2) - 2;
                 var series;
@@ -841,8 +843,11 @@ function removeSelection() {
                 updateChart(unitsState);
 
                 if (selectedStreams.length == 0) {
-                    chart.series[0].remove(); // Remove the "All" legend item
-                    chart.redraw();
+                    chartDiv.addClass('hidden');
+
+                    while (chart.series.length > 0) {
+                        chart.series[0].remove(); // Remove the "All" legend item
+                    }
 
                     // Hide selection buttons
                     selectionButtons.addClass('hidden');
@@ -922,7 +927,7 @@ function bindPlayClickEvent() {
 function bindStopClickEvent() {
     $('#stop-button').one('click', function (){
         // Activate previously disabled buttons
-        $('#clearAll, #clearLast, #btnSelectView').removeClass('disabled');
+        $('#clearAll, #clearLast, #btnSelectView, #btnRemoveSelection').removeClass('disabled');
         $('#sldrAnimate').removeAttr('disabled');
         $('#pause-button, #stop-button').addClass('disabled');
         $('.radio-buttons').each(function(){this.disabled = false;});
@@ -955,10 +960,10 @@ $('#play-button')
     })
     .on('click', function() {
         //Disable all buttons that would interfere with animation
-        $('#clearAll, #clearLast, #btnSelectView').addClass('disabled');
+        $('#clearAll, #clearLast, #btnSelectView, #btnRemoveSelection').addClass('disabled');
         $('#sldrAnimate').attr('disabled', true);
         $('#pause-button, #stop-button').removeClass('disabled');
-        $('.radio-buttons').each(function(){this.disabled = true;})
+        $('.radio-buttons').each(function(){this.disabled = true;});
 
         // De-activate 'Change Units' button functionality on chart
         $('#units-toggle').off('switchChange.bootstrapSwitch');

@@ -37,7 +37,8 @@
     font-weight: bold;
     border-radius: 10px;
 }
-#info, #loading-globe, #app-navigation, #status, .modal-title, #chart-buttons, #animation-buttons{
+#info, #loading-globe, #app-navigation, #status, .modal-title, #chart-buttons,
+#animation-buttons, #select-view-button-div, #remove-buttons-div {
     text-align: center;
 }
 #file-info {
@@ -59,13 +60,14 @@ h6 {
 }
 .btn-group, .btn {
     margin-top: 3px;
+    text-align: center;
 }
 
-#labels-toggle-group, #labels-toggle-group > .form-group {
-    float: right;
+#toggle-layer-buttons {
+    vertical-align: bottom;
 }
-#streams-toggle-group, #labels-toggle-group {
-    margin-top: 6px;
+.form-group {
+    margin-bottom: 0 !important;
 }
 .info-text {
     text-align: center;
@@ -73,5 +75,5 @@ h6 {
     font-size: 12px;
     background-color: #b2b2ff;
     color: white;
-    margin-top: 3px;
+    margin-top: 7px;
 }

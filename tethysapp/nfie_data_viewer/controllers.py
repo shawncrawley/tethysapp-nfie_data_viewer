@@ -24,21 +24,21 @@ def home(request):
     Controller for the app home page.
     """
 
-    btnClearAll = Button(display_text="Remove All Selections",
+    btnClearAll = Button(display_text="Remove All",
                          name="btnClearAll",
                          attributes="onclick=removeAllSelections(); id=clearAll",
-                         style="info",
+                         style="danger",
                          classes="btn-xs",
                          submit=False)
 
-    btnClearLast = Button(display_text="Remove Last Selection",
+    btnClearLast = Button(display_text="Remove Last",
                           name="btnClearLast",
                           attributes="onclick=removeLastSelection(); id=clearLast",
-                          style="primary",
+                          style="warning",
                           classes="btn-xs",
                           submit=False)
 
-    btnAnimateSelections = Button(display_text="Animate Selection(s)",
+    btnAnimateSelections = Button(display_text="Animate Selections",
                                   name="btnAnimateFlow",
                                   attributes="onclick=showAnimationTools();",
                                   style="success",
@@ -52,21 +52,22 @@ def home(request):
                            style="warning",
                            submit=False)
 
-    btnRemoveSelection = Button(display_text="Remove Selection",
+    btnRemoveSelection = Button(display_text="Remove on Click",
                          name="btnRemoveSelection",
                          attributes="onclick=removeSelection(); id=btnRemoveSelection",
-                         style="danger",
+                         style="default",
                          classes="btn-xs",
                          submit=False)
 
     btnZoomToSelections = Button(display_text="Zoom to Selections",
                          name="btnZoomToSelections",
                          attributes="onclick=zoomToSelection(); id=btnZoomToSelections",
-                         style="warning",
+                         style="info",
                          classes="btn-xs",
                          submit=False)
 
-    chartButtons = ButtonGroup(buttons=[btnRemoveSelection, btnClearLast, btnClearAll, btnAnimateSelections, btnZoomToSelections], vertical=False)
+    removeButtons = ButtonGroup(buttons=[btnRemoveSelection, btnClearLast, btnClearAll], vertical=False)
+    viewButtons = ButtonGroup(buttons=[btnAnimateSelections, btnZoomToSelections], vertical=False)
 
     sldrAnimate = RangeSlider(name='sldrAnimate',
                               attributes="id=sldrAnimate",
@@ -79,7 +80,7 @@ def home(request):
                                on_label='Metric',
                                off_label='English',
                                on_style='success',
-                               off_style='info',
+                               off_style='danger',
                                initial=True,
                                size='large',
                                )
@@ -104,12 +105,13 @@ def home(request):
 
     # Pass variables to the template via the context dictionary
     context = {
-        'chartButtons': chartButtons,
+        'removeButtons': removeButtons,
         'sldrAnimate': sldrAnimate,
         'unitsToggle': unitsToggle,
         'riversToggle': riversToggle,
         'labelsToggle': labelsToggle,
-        'btnSelectView': btnSelectView
+        'btnSelectView': btnSelectView,
+        'viewButtons': viewButtons
     }
 
     return render(request, 'nfie_data_viewer/home.html', context)
