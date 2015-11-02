@@ -38,6 +38,12 @@ $(function () {
 
     if (params["src"] == undefined || params["src"] == null) {
 
+        // Hide app-functionality buttons
+        $('#zoom-info-text').addClass('hidden');
+        $('#select-info-text').addClass('hidden');
+        $('#streams-toggle-group').addClass('hidden');
+        $('#labels-toggle-group').addClass('hidden');
+
         // Change welcome modal to show info about loading viewer from other app
         $('#welcome-info').html('<p>This app redirects from either the <a href="../nfie-irods-explorer">Tethys NFIE iRODS Explorer</a> or ' +
             '<a href="https://www.hydroshare.org">HydroShare</a> and is ' +
@@ -368,16 +374,17 @@ function animateSelections() {
             for (var streamIndex = 0; streamIndex < numStreams; streamIndex++) {
                 var seriesIndex = unitsState ? streamIndex*2 : (streamIndex*2)+1;
                 var currentVal = chart.series[seriesIndex].data[timeStep].y;
-
+                var dataRatio;
                 if ($("input:radio[name=color-scheme]:checked").val() == "Individual") {
                     var seriesYmax = chart.series[seriesIndex].dataMax;
-                    lightness = currentVal / seriesYmax;
+                    dataRatio = currentVal / seriesYmax;
                 }
                 else {
-                    var lightness = currentVal / chartYmax;
+                    dataRatio = currentVal / chartYmax;
                 }
+                var hue = -0.5 * dataRatio + 0.5;
 
-                selectedStreams[streamIndex].polyline.material = Cesium.Color.fromHsl((2/3), 1, 1-lightness, 1);
+                selectedStreams[streamIndex].polyline.material = Cesium.Color.fromHsl(hue, 1,.5, 1);
             }
             timeStep++;
         }
