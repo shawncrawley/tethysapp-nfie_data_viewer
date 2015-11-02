@@ -900,7 +900,8 @@ function addStreamsWithLabels(selectedCOMID, entityCoords) {
             label: {
                 text: getSelectionName(),
                 style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                outlineWidth: 2
+                outlineWidth: 2,
+                scale: 0.6
             },
             id: (selectedCOMID.toString() + "label"),
             show: showLabels
