@@ -100,3 +100,19 @@ h6 {
     text-align: center;
     font-weight: bold;
 }
+#byu-logo {
+    height: 100px;
+    width: 100px;
+    float: right;
+}
+#byu-logo-text {
+    font-size: 15px;
+    position: relative;
+    top: 30px;
+    left: -10px;
+    float: right;
+}
+#byu-content {
+    display: inline-block;
+    width: 100%;
+}
