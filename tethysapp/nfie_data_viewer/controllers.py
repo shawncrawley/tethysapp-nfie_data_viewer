@@ -11,10 +11,13 @@ from django.http import JsonResponse
 from tethys_apps.sdk.gizmos import Button, TextInput, ToggleSwitch, ButtonGroup, RangeSlider
 
 #######GLOBAL VARIABLES#########
-temp_dir = ''
-data_nc = None
-total_comids = 0
-sorted_comids = None
+temp_dir = None
+prediction_data = None
+rp_data = None
+total_prediction_comids = 0
+total_rp_comids = 0
+sorted_prediction_comids = None
+sorted_rp_comids = None
 time = None
 ################################
 
@@ -118,13 +121,15 @@ def home(request):
 
 
 def start_file_download(request):
-    global temp_dir, data_nc, total_comids, sorted_comids, time
+    global temp_dir, prediction_data, rp_data, total_prediction_comids, total_rp_comids, sorted_prediction_comids, \
+        sorted_rp_comids, time
     if request.method == 'GET':
         get_data = request.GET
-
+        this_script_path = inspect.getfile(inspect.currentframe())
         try:
-            file_path = get_data['res_id']
-            temp_dir = tempfile.mkdtemp()
+            if get_data['res_id'] is not None:
+                temp_dir = tempfile.mkdtemp()
+                file_path = get_data['res_id']
 
             if get_data['src'] == 'iRODS':
                 download = requests.get(file_path, stream=True)
@@ -133,7 +138,7 @@ def start_file_download(request):
                 with open(local_file_path, 'wb') as fd:
                     for chunk in download.iter_content(1024):
                         fd.write(chunk)
-                data_nc = nc.Dataset(local_file_path, mode="r")
+                prediction_data = nc.Dataset(local_file_path, mode="r")
 
             elif get_data['src'] == 'hs':
                 auth = HydroShareAuthBasic(username='username', password='*****')
@@ -144,24 +149,29 @@ def start_file_download(request):
                 # the resource title is the same as filename
                 hs.getResourceFile(file_path, filename, destination=temp_dir)
                 local_file_path = temp_dir + "/" + filename
-                data_nc = nc.Dataset(local_file_path, mode="r")
+                prediction_data = nc.Dataset(local_file_path, mode="r")
             else:
-                this_script_path = inspect.getfile(inspect.currentframe())
                 testfile_path = this_script_path.replace('controllers.py', 'public/data/test.nc')
-                data_nc = nc.Dataset(testfile_path, mode="r")
+                prediction_data = nc.Dataset(testfile_path, mode="r")
 
-            # extract the netcdf data to be plotted
-            qout_dimensions = data_nc.variables['Qout'].dimensions
+            # Sort the RAPID netCDF file by COMID
+            qout_dimensions = prediction_data.variables['Qout'].dimensions
             if qout_dimensions[0].lower() == 'comid' and qout_dimensions[1].lower() == 'time':
-                sorted_comids = sorted(enumerate(data_nc.variables['COMID'][:]), key=lambda comid: comid[1])
-                total_comids = len(data_nc.variables['COMID'][:])
+                sorted_prediction_comids = sorted(enumerate(prediction_data.variables['COMID'][:]),
+                                                  key=lambda comid: comid[1])
+                total_prediction_comids = len(sorted_prediction_comids)
             else:
                 return JsonResponse({'error': "Invalid netCDF file"})
-            variables = data_nc.variables.keys()
+            variables = prediction_data.variables.keys()
             if 'time' in variables:
-                time = [t * 1000 for t in data_nc.variables['time'][:]]
+                time = [t * 1000 for t in prediction_data.variables['time'][:]]
             else:
                 return JsonResponse({'error': "Invalid netCDF file"})
+
+            rp_data_path = this_script_path.replace('controllers.py', 'public/data/return_period_data.nc')
+            rp_data = nc.Dataset(rp_data_path, mode="r")
+            sorted_rp_comids = sorted(enumerate(rp_data.variables['COMID'][:]), key=lambda comid: comid[1])
+            total_rp_comids = len(sorted_rp_comids)
             return JsonResponse({'success': "The file is ready to go."})
         except Exception, err:
             return JsonResponse({'error': err})
@@ -170,55 +180,56 @@ def start_file_download(request):
 
 
 def get_netcdf_data(request):
-    global temp_dir, data_nc, total_comids, sorted_comids, time
+    global temp_dir, prediction_data, rp_data, total_prediction_comids, total_rp_comids, sorted_prediction_comids, \
+        sorted_rp_comids, time
     if request.method == 'GET':
         get_data = request.GET
-        return_data = []
-
+        ts_pairs_data = {}  # For time series pairs data
+        rp_cls_data = {}  # For return period classification data
+        rp_bmk_data = {}  # For return period benchmark data
         try:
             comids = str(get_data['comids'])
             comids = comids.split(',')
-
-            for comid in comids:
-                index = None
-                comid = int(comid)
-                divider = 2
-                guess = total_comids / divider
-                while (total_comids / divider > 10) and (comid != sorted_comids[guess][1]):
-                    divider *= 2
-                    if comid > sorted_comids[guess][1]:
-                        guess += total_comids / divider
+            for comid_iter in comids:
+                comid = int(comid_iter)
+                prediction_file_index = match_comid_algorithm(comid, total_prediction_comids, sorted_prediction_comids)
+                if prediction_file_index == -1:
+                    if len(comids) == 1:
+                        return JsonResponse({'error': "Data for this reach could not be found within the file."})
                     else:
-                        guess -= total_comids / divider
-
-                guess = int(guess)
-
-                iteration = 0
-                if comid == sorted_comids[guess][1]:
-                    index = sorted_comids[guess][0]
-                    iteration = 1
-                elif comid > sorted_comids[guess][1]:
-                    while (sorted_comids[guess][1] != comid) and (iteration < 100):
-                        guess += 1
-                        iteration += 1
+                        q_out = [-9999]
                 else:
-                    while (sorted_comids[guess][1] != comid) and (iteration < 100):
-                        guess -= 1
-                        iteration += 1
-
-                if (index is None) and (iteration < 100):
-                    index = sorted_comids[guess][0]
-                    q_out = data_nc.variables['Qout'][index].tolist()
-                elif ((index is None) or (iteration == 1)) and (len(comids) == 1):
-                    return JsonResponse({'error': "Data for this reach could not be found within the file."})
+                    q_out = prediction_data.variables['Qout'][prediction_file_index].tolist()
+                rp_file_index = match_comid_algorithm(comid, total_rp_comids, sorted_rp_comids)
+                rp_benchmarks = []
+                if rp_file_index != -1:
+                    rp_benchmarks.append(rp_data.variables['return_period_2'][rp_file_index])
+                    rp_benchmarks.append(rp_data.variables['return_period_10'][rp_file_index])
+                    rp_benchmarks.append(rp_data.variables['return_period_20'][rp_file_index])
                 else:
-                    q_out = [-9999]
-
-                return_data.append({str(comid): zip(time, q_out)})
-
+                    rp_benchmarks.append(-9999)
+                    rp_benchmarks.append(-9999)
+                    rp_benchmarks.append(-9999)
+                rp_classification = []
+                for q in q_out:
+                    if q == -9999:
+                        rp_classification.append(-9999)
+                    elif q < rp_benchmarks[0]:
+                        rp_classification.append(0)
+                    elif q < rp_benchmarks[1]:
+                        rp_classification.append(2)
+                    elif q < rp_benchmarks[2]:
+                        rp_classification.append(10)
+                    else:
+                        rp_classification.append(20)
+                ts_pairs_data[str(comid)] = zip(time, q_out)
+                rp_cls_data[str(comid)] = rp_classification
+                rp_bmk_data[str(comid)] = rp_benchmarks
             return JsonResponse({
                 "success": "Data analysis complete!",
-                "return_data": json.dumps(return_data)
+                "ts_pairs_data": json.dumps(ts_pairs_data),
+                "rp_cls_data": json.dumps(rp_cls_data),
+                "rp_bmk_data": json.dumps(rp_bmk_data)
             })
         except Exception, err:
             return JsonResponse({'error': err})
@@ -227,13 +238,45 @@ def get_netcdf_data(request):
 
 
 def delete_file(request):
-    global temp_dir, data_nc
+    global temp_dir, prediction_data
 
     try:
-        data_nc.close()
-        shutil.rmtree(temp_dir)
+        if prediction_data is not None:
+            prediction_data.close()
+        if temp_dir is not None:
+            shutil.rmtree(temp_dir)
 
     except Exception, err:
         return JsonResponse({"error": err})
 
     return JsonResponse({"success": "File has been deleted"})
+
+
+def match_comid_algorithm(comid, count_comids, sorted_comids):
+    index = None
+    divider = 2
+    guess = count_comids / divider
+    while (count_comids / divider > 10) and (comid != sorted_comids[guess][1]):
+        divider *= 2
+        if comid > sorted_comids[guess][1]:
+            guess += count_comids / divider
+        else:
+            guess -= count_comids / divider
+    guess = int(guess)
+    iteration = 0
+    if comid == sorted_comids[guess][1]:
+        index = sorted_comids[guess][0]
+        return index
+    elif comid > sorted_comids[guess][1]:
+        while (sorted_comids[guess][1] != comid) and (iteration < 100):
+            guess += 1
+            iteration += 1
+    else:
+        while (sorted_comids[guess][1] != comid) and (iteration < 100):
+            guess -= 1
+            iteration += 1
+    if (index is None) and (iteration < 100):
+        index = sorted_comids[guess][0]
+        return index
+    else:
+        return -1

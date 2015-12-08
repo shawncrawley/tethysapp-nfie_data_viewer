@@ -77,3 +77,26 @@ h6 {
     color: white;
     margin-top: 7px;
 }
+#blue {
+    background-color: blue;
+    color: white;
+}
+#yellow {
+    background-color: yellow;
+}
+#orange {
+    background-color: orange;
+}
+#red {
+    background-color: red;
+    color: white;
+}
+#animation-legend-title {
+    vertical-align: middle;
+    font-weight: bold;
+    text-align: right;
+}
+.legend-item {
+    text-align: center;
+    font-weight: bold;
+}

@@ -63,6 +63,13 @@
 <div id="toggle-layer-buttons">
     <div class="col-md-3" id="streams-toggle-group">{% gizmo toggle_switch riversToggle %}</div>
     <div class="col-md-3" id="labels-toggle-group">{% gizmo toggle_switch labelsToggle %}</div>
+    <div class="col-md-6 hidden" id="animation-legend">
+        <div class="col-sm-4" id="animation-legend-title">Animation Legend:</div>
+        <div class="col-sm-2 legend-item" id="blue">1st Quartile</div>
+        <div class="col-sm-2 legend-item" id="yellow">2nd Quartile</div>
+        <div class="col-sm-2 legend-item" id="orange">3rd Quartile</div>
+        <div class="col-sm-2 legend-item" id="red">4th Quartile</div>
+    </div>
 </div>
 <div id="cesiumContainer"></div>
 <div id="info"></div>
@@ -87,8 +94,8 @@
     <div>
         <p>Animate streams relative to:</p>
         <form>
-            <input type="radio" name="color-scheme" class="radio-buttons" value="All" checked>All Selected Streams<br>
-            <input type="radio" name="color-scheme" class="radio-buttons" value="Individual">Individual Streams Themselves
+            <input type="radio" name="color-scheme" class="radio-buttons" value="All" checked>All Selected Streams (Relative)<br>
+            <input type="radio" name="color-scheme" class="radio-buttons" value="Individual">Individual Streams (Return Periods)
         </form>
     </div>
     <div id="animation-slider">

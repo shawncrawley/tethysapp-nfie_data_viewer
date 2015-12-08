@@ -3,7 +3,7 @@
 var viewer, scene, layers, USRivers, selectedStreams = [], selectedLabels = [], tempPoints = [], globeClickListener, removeSelectionListener;
 
 // Variables related to the netcdf chart
-var defaultChartSettings, chart, selectionCounter = 1;
+var defaultChartSettings, chart, selectionCounter = 1, chartShowingBmks = false;
 
 // Variables related to the animation
 var playAnimation, pauseAnimation, stopAnimation;
@@ -17,6 +17,12 @@ var popupDiv = $('#welcome-popup');
 var searchOutput = $('#search-output');
 var animationButtons = $('#animation-buttons');
 var menuBar = $('#app-content-wrapper');
+
+// Global data variables
+var tsPairsData = {};
+var rpClsData = {};
+var rpBmkData = {};
+
 
 $(function () {
 
@@ -136,7 +142,8 @@ $(function () {
     layers = scene.imageryLayers;
 
     USRivers = layers.addImageryProvider(new Cesium.ArcGisMapServerImageryProvider({
-        url: 'http://141.142.168.31/arcgis/rest/services/hydro/NFIEGeoNational_flowline/MapServer',
+        url: 'http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer',
+        //'http://141.142.168.31/arcgis/rest/services/hydro/NFIEGeoNational_flowline/MapServer',
         layers: '0',
         tileWidth: 256,
         tileHeight: 256
@@ -164,13 +171,14 @@ $(function () {
                     legendItemClick: function (event) {
                         var unitsState = $('#units-toggle').bootstrapSwitch('state');
                         var clickedSeries = event.currentTarget.name;
+                        chart.yAxis[0].setExtremes(null, null);
                         if (clickedSeries == 'All') {
+                            removeBenchmarks();
                             updateChart(unitsState);
                         }
                         else {
                             var seriesIndex = unitsState ? ((parseInt(clickedSeries) - 1) * 2) : ((parseInt(clickedSeries) * 2) - 1);
                             var numSeries = chart.series.length;
-                            chart.yAxis[0].setExtremes(null, null);
                             for (var i = 0; i < numSeries-1; i++) {
                                 if (i == seriesIndex) {
                                     showSeries(i);
@@ -178,6 +186,9 @@ $(function () {
                                     (i % 2 == 0) ? hideSeries(i, unitsState) : hideSeries(i, !unitsState);
                                 }
                             }
+                            var comid = this.userOptions.id.toString();
+                            removeBenchmarks();
+                            plotBenchmarks(comid);
                             chart.redraw();
                         }
                         return false;
@@ -232,7 +243,7 @@ $(function () {
 /****************************
  ****SET ON-CLOSE FUNCTION****
  ****************************/
-window.onbeforeunload = function() {
+window.onunload = function() {
     try {
         $.ajax({
             url: 'delete-file' //This is a UrlMap (setup in app.py) that calls the delete_file function in controllers.py
@@ -281,7 +292,7 @@ function selectView() {
 
 
     // Make JSON call to EPA streams layer to return stream vector geometry within the viewport
-    Cesium.jsonp('http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer/0/query',{
+    Cesium.loadJsonp('http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer/0/query',{
         parameters: {
             geometryType: "esriGeometryPolygon",
             geometry: geometry,
@@ -294,7 +305,8 @@ function selectView() {
         .then(function(data) {
             var numFeatures = data.features.length; // Number of returned features
             var selectedCOMIDS = []; // Master array for the COMID of each feature
-            var entityCoords = []; // Master array For the coordinate array of each feature
+            var selectionCoords = {}; // Master dictionary For the coordinate array of each feature
+            var comid;
 
             for (var i = 0; i < numFeatures; i++) {
                 var coords = [];
@@ -304,11 +316,12 @@ function selectView() {
                     coords.push(coordinates[ii][0]);
                     coords.push(coordinates[ii][1]);
                 }
-                entityCoords.push(coords); // Add the array of coordinates to the master array
-                selectedCOMIDS.push(data.features[i].attributes.COMID); // Add the comid to the master array
+                comid = data.features[i].attributes.COMID;
+                selectionCoords[comid] = coords; // Add the array of coordinates to the master array
+                selectedCOMIDS.push(comid); // Add the comid to the master array
             }
 
-            processSelections(selectedCOMIDS, entityCoords);
+            processSelections(selectedCOMIDS, selectionCoords);
         })
 }
 
@@ -372,19 +385,44 @@ function animateSelections() {
             timeBar.setData([[tickPosition[timeStep + 1], chartYmin], [tickPosition[timeStep + 1], chartYmax]]);
 
             for (var streamIndex = 0; streamIndex < numStreams; streamIndex++) {
-                var seriesIndex = unitsState ? streamIndex*2 : (streamIndex*2)+1;
-                var currentVal = chart.series[seriesIndex].data[timeStep].y;
-                var dataRatio;
                 if ($("input:radio[name=color-scheme]:checked").val() == "Individual") {
-                    var seriesYmax = chart.series[seriesIndex].dataMax;
-                    dataRatio = currentVal / seriesYmax;
+                    var comid = selectedStreams[streamIndex]._id;
+                    var currentValCls = rpClsData[comid][timeStep];
+                    switch (currentValCls) {
+                        case 0:
+                            selectedStreams[streamIndex].polyline.material = Cesium.Color.BLUE;
+                            break;
+                        case 2:
+                            selectedStreams[streamIndex].polyline.material = Cesium.Color.YELLOW;
+                            break;
+                        case 10:
+                            selectedStreams[streamIndex].polyline.material = Cesium.Color.ORANGE;
+                            break;
+                        case 20:
+                            selectedStreams[streamIndex].polyline.material = Cesium.Color.RED;
+                            break;
+                        default:
+                            console.error("Invalid classification found in dictionary for comid: " + comid)
+                    }
                 }
                 else {
+                    var seriesIndex = unitsState ? streamIndex*2 : (streamIndex*2)+1;
+                    var currentVal = chart.series[seriesIndex].data[timeStep].y;
+                    var dataRatio;
                     dataRatio = currentVal / chartYmax;
+                    if (dataRatio < 0.25) {
+                        selectedStreams[streamIndex].polyline.material = Cesium.Color.BLUE;
+                    }
+                    else if (dataRatio < 0.50) {
+                        selectedStreams[streamIndex].polyline.material = Cesium.Color.YELLOW;
+                    }
+                    else if (dataRatio < 0.75) {
+                        selectedStreams[streamIndex].polyline.material = Cesium.Color.ORANGE;
+                    }
+                    else if (dataRatio < 1) {
+                        selectedStreams[streamIndex].polyline.material = Cesium.Color.RED;
+                    }
                 }
-                var hue = -0.5 * dataRatio + 0.5;
-
-                selectedStreams[streamIndex].polyline.material = Cesium.Color.fromHsl(hue, 1,.5, 1);
             }
             timeStep++;
         }
@@ -392,7 +430,7 @@ function animateSelections() {
 
             // Change entity color back to yellow highlight
             for (var i = 0; i < numStreams; i++) {
-                selectedStreams[i].polyline.material = Cesium.Color.YELLOW;
+                selectedStreams[i].polyline.material = Cesium.Color.AQUA;
                 selectedStreams[i].polyline.width = 2;
             }
 
@@ -457,14 +495,8 @@ function successPIS(result) {
     //build output results text block for display
     var srvFL = result.output.ary_flowlines;
     var selectedCOMID = srvFL[0].comid.toString();
-    var reachCode = srvFL[0].reachcode;
-    var gnisName = srvFL[0].gnis_name;
-    var huc12 = srvFL[0].wbd_huc12;
-    var selectionName = getSelectionName();
-
     try {
-        //add the selected flow line to the map
-        var entityCoords = [];
+        var entityCoords = {};
         var coords = [];
         var numCoordinates = srvFL[0].shape.coordinates.length;
         var coordinates = srvFL[0].shape.coordinates;
@@ -472,15 +504,8 @@ function successPIS(result) {
             coords.push(coordinates[ii][0]);
             coords.push(coordinates[ii][1]);
         }
-        entityCoords.push(coords);
+        entityCoords[selectedCOMID] = coords;
 
-        searchOutput.append(
-            '<div><strong>Info for Selection ' + selectionName + ':</strong><br>' +
-            'Feature Name = ' + gnisName + '<br>' +
-            'COMID = ' + selectedCOMID + '<br>' +
-            'Reach Code = ' + reachCode + '<br>' +
-            'HUC 12 = ' + huc12 + '<br></div>'
-        );
         processSelections(selectedCOMID, entityCoords);
     }
     catch(err){}
@@ -499,7 +524,7 @@ function reportFailedSearch(MessageText){
  *******BUILD CHART FUNCTIONALITY********
  ****************************************/
 
-function processSelections(selectedCOMIDS, entityCoords) {
+function processSelections(selectedCOMIDS, selectionCoords) {
 
     // If the "All" legend options exist, remove them so they can be placed as the last legend option again
     if (chart.get('show-all') != null) {
@@ -533,9 +558,9 @@ function processSelections(selectedCOMIDS, entityCoords) {
     var iRequest = 0;
     var sendData = queryCOMIDS[iRequest].join();
 
-    queryChartData(sendData, totalLoops);
+    queryFileData(sendData, totalLoops);
 
-    function queryChartData(iSendData, totalRequests) {
+    function queryFileData(iSendData, totalRequests) {
         $.ajax({
             type: 'GET',
             url: 'get-netcdf-data/',
@@ -548,31 +573,47 @@ function processSelections(selectedCOMIDS, entityCoords) {
             },
             success: function (data) {
                 if ("success" in data) {
-                    if ("return_data" in data) {
-                        var chartData = JSON.parse(data.return_data);
-                        var seriesCount = chartData.length;
-
-                        for (var i = 0; i < seriesCount; i++) {
-                            for (var key in chartData[i]) {
-                                if (chartData[i][key][0][1] != -9999) {
-                                    var actualIndex = (iRequest * 50) + i;
-                                    addStreamsWithLabels(selectedCOMIDS[actualIndex], entityCoords[actualIndex]);
-                                    var seriesData = chartData[i][key];
-                                    plotData(seriesData);
-                                    plotData(convertTimeSeriesMetricToEnglish(seriesData));
-                                }
+                    if ("rp_cls_data" in data) {
+                        var returned_rpClsData = JSON.parse(data.rp_cls_data);
+                        for (var key in returned_rpClsData) {
+                            rpClsData[key] = returned_rpClsData[key];
+                        }
+                    }
+                    if ("rp_bmk_data" in data) {
+                        var returned_rpBmkData = JSON.parse(data.rp_bmk_data);
+                        for (var key in returned_rpBmkData) {
+                            rpBmkData[key] = returned_rpBmkData[key];
+                        }
+                    }
+                    if ("ts_pairs_data" in data) {
+                        var returned_tsPairsData = JSON.parse(data.ts_pairs_data);
+                        var actualIndexTracker = 0;
+                        for (var key in returned_tsPairsData) {
+                            tsPairsData[key] = returned_tsPairsData[key];
+                            if (returned_tsPairsData[key][0][1] != -9999) {
+                                addStreamsWithLabels(key, selectionCoords[key]);
+                                var seriesData = returned_tsPairsData[key];
+                                chart.yAxis[0].setExtremes(null, null);
+                                plotData(seriesData, key);
+                                plotData(convertTimeSeriesMetricToEnglish(seriesData, key));
                             }
+                            actualIndexTracker += 1
                         }
                     }
                     iRequest++;
                     if (iRequest < totalRequests) {
-                        queryChartData(queryCOMIDS[iRequest].join(), totalRequests);
+                        queryFileData(queryCOMIDS[iRequest].join(), totalRequests);
                     }
                     else {
                         infoDiv.addClass('hidden');
                         // Show selected streams, chart, and selection buttons
                         viewer.entities.resumeEvents();
-
+                        if (chart.series.length == 2) {
+                            plotBenchmarks(queryCOMIDS);
+                        }
+                        else {
+                            removeBenchmarks();
+                        }
                         showChart();
 
                         if (selectionButtons.hasClass('hidden')) {
@@ -617,15 +658,70 @@ var convertTimeSeriesMetricToEnglish = function (timeSeries) {
     return newTimeSeries;
 };
 
-var plotData = function(data) {
+var plotData = function(data_object, id) {
     var seriesName = getSelectionName();
     var dataSeries = {
         name: seriesName,
-        data: data,
-        dashStyle: 'longdash'
+        data: data_object,
+        dashStyle: 'longdash',
+        id: id
     };
     chart.addSeries(dataSeries, false);
     selectionCounter++;
+};
+
+var plotBenchmarks = function(comid) {
+    var comidData = tsPairsData[comid];
+    var dataMax = 0;
+    for (var dataPair in comidData) {
+        if (comidData[dataPair][1] > dataMax) {
+            dataMax = comidData[dataPair][1];
+        }
+    }
+    var rpBmks = rpBmkData[comid];
+    var color;
+    var labelText;
+    for (var bmk_string in rpBmks) {
+        var bmk = parseInt(bmk_string);
+        switch (bmk) {
+            case 0:
+                color = "#ffff80";  // Yellow
+                labelText = "2-year-event";
+                break;
+            case 1:
+                color = "#ffd280";  // Orange
+                labelText = "10-year-event";
+                break;
+            case 2:
+                color = "#ff8080";  // Red
+                labelText = "20-year-event";
+                break;
+            default:
+                console.error("There are too many items in the rpBmkData list. There should only be three.")
+        }
+        chart.yAxis[0].addPlotBand({
+            from: rpBmks[bmk],
+            to: rpBmks[bmk+1] ? rpBmks[bmk+1] : rpBmks[bmk] + 20,
+            color: color,
+            label: {
+                text: labelText,
+                style: {
+                    fontSize: 10,
+                    verticalAlign: 'middle'
+                }
+            },
+            id: "all"
+        });
+    }
+    chart.yAxis[0].setExtremes(0, Math.max(rpBmks[2], dataMax));
+    chartShowingBmks = true;
+};
+
+var removeBenchmarks = function() {
+    if (chartShowingBmks) {
+        chart.yAxis[0].removePlotBand('all');
+        chartShowingBmks = false;
+    }
 };
 
 function updateChart(state) {
@@ -701,6 +797,7 @@ function removeLastSelection() {
     if (numSeries > 0) {
         if (chart.series.length == 2) {
             removeAllSelections();
+            return;
         }
         else if (numSeries == 5) {
             chart.series[numSeries - 1].remove(); // Remove "All" legend item (only shown with two or more streams selected)
@@ -720,6 +817,8 @@ function removeLastSelection() {
         viewer.entities.remove(selectedStreams.pop());
         viewer.entities.remove(selectedLabels.pop());
     }
+
+    removeBenchmarks();
 
     $(window).resize();
 }
@@ -748,10 +847,16 @@ function removeAllSelections() {
     selectionButtons.addClass('hidden');
     $('#select-info-text').removeClass('hidden');
     animationButtons.addClass('hidden');
+    $('#animation-legend').addClass('hidden');
     $('[name="btnAnimateFlow"]').removeClass('active');
 
     // Reset selection counter
     selectionCounter = 1;
+
+    removeBenchmarks();
+    rpBmkData = {}
+    rpClsData = {}
+    tsPairsData = {}
 
     $(window).resize();
 }
@@ -860,6 +965,7 @@ function removeSelection() {
                     selectionButtons.addClass('hidden');
                     $('#select-info-text').removeClass('hidden');
                     animationButtons.addClass('hidden');
+                    $('#animation-legend').addClass('hidden');
                     $('[name="btnAnimateFlow"]').removeClass('active');
                     $('#btnRemoveSelection').removeClass('active');
 
@@ -875,20 +981,21 @@ function removeSelection() {
  *********GLOBAL FUNCTIONALITY**********
  ****************************************/
 
-function addStreamsWithLabels(selectedCOMID, entityCoords) {
+function addStreamsWithLabels(selectedCOMID, selectionCoords) {
     // Add stream segment
     try {
         selectedStreams.push(viewer.entities.add({
             id: selectedCOMID,
             polyline: {
-                positions: Cesium.Cartesian3.fromDegreesArray(entityCoords),
+                positions: Cesium.Cartesian3.fromDegreesArray(selectionCoords),
                 width: 2,
-                material: Cesium.Color.YELLOW
-            }
+                material: Cesium.Color.AQUA
+            },
+            chartLabel: getSelectionName()
         }));
 
         // Get coordinates of midpoint of stream segment to add Label to midpoint
-        var midPoint = entityCoords.length / 2;
+        var midPoint = selectionCoords.length / 2;
         var midIndex = midPoint % 2 == 0 ? midPoint : midPoint + 1;
 
         // Check if labels should be shown or not
@@ -896,7 +1003,7 @@ function addStreamsWithLabels(selectedCOMID, entityCoords) {
 
         // Add label to stream
         selectedLabels.push(viewer.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(entityCoords[midIndex], entityCoords[midIndex + 1]),
+            position: Cesium.Cartesian3.fromDegrees(selectionCoords[midIndex], selectionCoords[midIndex + 1]),
             label: {
                 text: getSelectionName(),
                 style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -918,6 +1025,23 @@ function getSelectionName() {
 /*************************************************
  *********ANIMATION BUTTONS FUNCTIONALITY*********
  *************************************************/
+
+$("input:radio[name=color-scheme]").change(
+    function() {
+        if ($("input:radio[name=color-scheme]:checked").val() == "Individual") {
+            $('#blue').text("Low flow");
+            $('#yellow').text("2-year");
+            $('#orange').text("10-year");
+            $('#red').text("20-year");
+        }
+        else {
+            $('#blue').text("1st Quartile");
+            $('#yellow').text("2nd Quartile");
+            $('#orange').text("3rd Quartile");
+            $('#red').text("4th Quartile");
+        }
+    }
+);
 
 function bindPlayClickEvent() {
     $('#play-button').one('click', function() {
@@ -1004,7 +1128,9 @@ function showAnimationTools() {
         else {
             $('[name="btnAnimateFlow"]').removeClass('active');
             animationButtons.addClass('hidden');
+            $('#animation-legend').addClass('hidden');
         }
+        $('#animation-legend').removeClass('hidden');
     }
     else {
         alert("Please make a selection first");
