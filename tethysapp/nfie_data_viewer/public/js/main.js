@@ -292,7 +292,7 @@ function selectView() {
 
 
     // Make JSON call to EPA streams layer to return stream vector geometry within the viewport
-    Cesium.loadJsonp('http://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer/0/query',{
+    Cesium.loadJsonp('https://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer/0/query',{
         parameters: {
             geometryType: "esriGeometryPolygon",
             geometry: geometry,
