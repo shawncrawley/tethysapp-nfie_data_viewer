@@ -1,6 +1,6 @@
 "use strict";
 // Variables related to the cesium globe
-var viewer, scene, layers, USRivers, selectedStreams = [], selectedLabels = [], tempPoints = [], globeClickListener, removeSelectionListener;
+var viewer, scene, layers, USRivers, selectedStreams = [], selectedLabels = [], globeClickListener, removeSelectionListener;
 
 // Variables related to the netcdf chart
 var defaultChartSettings, chart, selectionCounter = 1, chartShowingBmks = false;
@@ -142,8 +142,7 @@ $(function () {
     layers = scene.imageryLayers;
 
     USRivers = layers.addImageryProvider(new Cesium.ArcGisMapServerImageryProvider({
-        url: 'https://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer',
-        //'http://141.142.168.31/arcgis/rest/services/hydro/NFIEGeoNational_flowline/MapServer',
+        url: 'https://cgmap1.ncsa.illinois.edu/arcgis/rest/services/hydro/NFIEGeoNational_flowline/MapServer',
         layers: '0',
         tileWidth: 256,
         tileHeight: 256
@@ -243,10 +242,12 @@ $(function () {
 /****************************
  ****SET ON-CLOSE FUNCTION****
  ****************************/
-window.onunload = function() {
+window.onbeforeunload = function() {
+    console.log("ran");
     try {
         $.ajax({
-            url: 'delete-file' //This is a UrlMap (setup in app.py) that calls the delete_file function in controllers.py
+            url: 'delete-file', //This is a UrlMap (setup in app.py) that calls the delete_file function in controllers.py
+            async: false
         });
     }
     catch(err) {}
@@ -854,9 +855,9 @@ function removeAllSelections() {
     selectionCounter = 1;
 
     removeBenchmarks();
-    rpBmkData = {}
-    rpClsData = {}
-    tsPairsData = {}
+    rpBmkData = {};
+    rpClsData = {};
+    tsPairsData = {};
 
     $(window).resize();
 }
