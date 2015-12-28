@@ -253,6 +253,24 @@ window.onbeforeunload = function() {
     catch(err) {}
 };
 
+function selectReach(lon, lat) {
+    var precision = .001;
+    var upLon = lon + precision;
+    var lowLon = lon - precision;
+    var upLat = lat + precision;
+    var lowLat = lat - precision;
+
+    // Create ArcGIS rest service geometry query parameter with required syntax
+    var geometry = '{"hasZ": false, "hasM": false, "rings": ' +
+        '[[[' + upLon + ',' + upLat + '],' +
+        '[' + upLon + ',' + upLat + '],' +
+        '[' + lowLon + ',' + lowLat + '],' +
+        '[' + lowLon + ',' + lowLat + '],' +
+        '[' + upLon + ',' + upLat + ']]], "spatialReference" : {"wkid" : 4326}}';
+
+    queryMapServer(geometry);
+}
+
 // Selects all streams in the view. This is called from the Select View button passed from controllers.py
 function selectView() {
 
@@ -291,18 +309,21 @@ function selectView() {
         '[' + blLongitude + ',' + blLatitude + '],' +
         '[' + tlLongitude + ',' + tlLatitude + ']]], "spatialReference" : {"wkid" : 4326}}';
 
+    queryMapServer(geometry);
+}
 
-    // Make JSON call to EPA streams layer to return stream vector geometry within the viewport
-    Cesium.loadJsonp('https://watersgeo.epa.gov/arcgis/rest/services/NHDPlus_NP21/NHDSnapshot_NP21/MapServer/0/query',{
-        parameters: {
-            geometryType: "esriGeometryPolygon",
-            geometry: geometry,
-            outFields: 'COMID',
-            inSR: '{"wkid" : 4326}',
-            outSR: '{"wkid" : 4326}',
-            f: 'json'
-        }
-    })
+function queryMapServer(geometry) {
+    // Make JSON call to CyberGIS streams layer to return stream vector geometry within the polygon geometry
+    Cesium.loadJsonp('https://cgmap1.ncsa.illinois.edu/arcgis/rest/services/hydro/NFIEGeoNational_flowline/MapServer/0/query',{
+            parameters: {
+                geometryType: "esriGeometryPolygon",
+                geometry: geometry,
+                outFields: 'COMID',
+                inSR: '{"wkid" : 4326}',
+                outSR: '{"wkid" : 4326}',
+                f: 'json'
+            }
+        })
         .then(function(data) {
             var numFeatures = data.features.length; // Number of returned features
             var selectedCOMIDS = []; // Master array for the COMID of each feature
@@ -321,8 +342,20 @@ function selectView() {
                 selectionCoords[comid] = coords; // Add the array of coordinates to the master array
                 selectedCOMIDS.push(comid); // Add the comid to the master array
             }
+            if (selectedCOMIDS.length < 1) {
+                infoDiv.html('<span><strong>Please make a more precise click over the stream of your choice</strong></span>')
+                    .removeClass('hidden')
+                    .addClass('wait');
 
-            processSelections(selectedCOMIDS, selectionCoords);
+                // Hide error message 3 seconds after showing it
+                setTimeout(function () {
+                    infoDiv.addClass('hidden')
+                        .removeClass('wait');
+                }, 3000);
+            }
+            else {
+                processSelections(selectedCOMIDS, selectionCoords);
+            }
         })
 }
 
@@ -445,83 +478,6 @@ function animateSelections() {
 }
 
 /****************************************
- *********EPA WMS FUNCTIONALITY**********
- ****************************************/
-function runPointIndexingService(lonlat) {
-    var inputLon = lonlat[0];
-    var inputLat = lonlat[1];
-    var wktval = "POINT(" + inputLon + " " + inputLat + ")";
-
-    var options = {
-        "success" : "successPIS",
-        "error"   : "errorPIS",
-        "timeout" : 60 * 1000
-    };
-
-    var data = {
-        "pGeometry": wktval,
-        "pGeometryMod": "WKT,SRSNAME=urn:ogc:def:crs:OGC::CRS84",
-        "pPointIndexingMethod": "DISTANCE",
-        "pPointIndexingMaxDist": 10,
-        "pOutputPathFlag": "TRUE",
-        "pReturnFlowlineGeomFlag": "FULL",
-        "optOutCS": "SRSNAME=urn:ogc:def:crs:OGC::CRS84",
-        "optOutPrettyPrint": 0,
-        "optClientRef": "CodePen"
-    };
-    waitingPIS();
-    WATERS.Services.PointIndexingService(data, options);
-    /* The service runs and when it is done, it will call either the
-     success or error functions. So the actual actions upon success all
-     happen in the success function. */
-}
-
-function waitingPIS() {
-    searchOutput.append('<div class="search-output-loading">' +
-        '<img id="loading-globe" src="http://www.epa.gov/waters/tools/globe_spinning_small.gif"></div>');
-}
-
-function successPIS(result) {
-    $('.search-output-loading').remove();
-    var srvRez = result.output;
-    if (srvRez == null) {
-        if ( result.status.status_message !== null ) {
-            reportFailedSearch(result.status.status_message);
-        } else {
-            reportFailedSearch("No reach located near your click point.");
-        }
-        return;
-    }
-
-    //build output results text block for display
-    var srvFL = result.output.ary_flowlines;
-    var selectedCOMID = srvFL[0].comid.toString();
-    try {
-        var entityCoords = {};
-        var coords = [];
-        var numCoordinates = srvFL[0].shape.coordinates.length;
-        var coordinates = srvFL[0].shape.coordinates;
-        for (var ii = 0; ii < numCoordinates; ii++) {
-            coords.push(coordinates[ii][0]);
-            coords.push(coordinates[ii][1]);
-        }
-        entityCoords[selectedCOMID] = coords;
-
-        processSelections(selectedCOMID, entityCoords);
-    }
-    catch(err){}
-}
-
-function errorPIS(XMLHttpRequest, textStatus, errorThrown) {
-    reportFailedSearch(textStatus);
-}
-
-function reportFailedSearch(MessageText){
-    //Set the message of the bad news
-    searchOutput.append('<strong>Search Results:</strong><br>' + MessageText);
-}
-
-/****************************************
  *******BUILD CHART FUNCTIONALITY********
  ****************************************/
 
@@ -532,14 +488,14 @@ function processSelections(selectedCOMIDS, selectionCoords) {
         chart.get('show-all').remove();
     }
 
-    infoDiv.html('<p><strong>Retrieving data for specific reach...' +
-        '<img src="/static/nfie_data_viewer/images/ajax-loader.gif"/>' +
-        '<p>This could take a moment</p>')
+    infoDiv.html('<p><strong>Retrieving data for specific reach or view...' +
+            '<br><img src="/static/nfie_data_viewer/images/ajax-loader.gif"/>' +
+            '<p>This could take a moment</p>')
         .removeClass('error hidden');
 
-    if (selectedCOMIDS.constructor !== Array) {
-        selectedCOMIDS = selectedCOMIDS.split();
-    }
+    //if (selectedCOMIDS.constructor !== Array) {
+    //    selectedCOMIDS = selectedCOMIDS.split();
+    //}
 
     var queryCOMIDS = [];
     var numCOMIDS = selectedCOMIDS.length;
@@ -1146,11 +1102,7 @@ function addGlobeClickEvent() {
             var cartographic = ellipsoid.cartesianToCartographic(cartesian);
             var longitude = Cesium.Math.toDegrees(cartographic.longitude);
             var latitude = Cesium.Math.toDegrees(cartographic.latitude);
-            var lonlat = [];
-            lonlat.push(longitude);
-            lonlat.push(latitude);
-
-            runPointIndexingService(lonlat);
+            selectReach(longitude, latitude);
         }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 }
