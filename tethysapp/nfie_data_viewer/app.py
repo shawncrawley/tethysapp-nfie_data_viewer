@@ -12,6 +12,7 @@ class NFIEDataViewer(TethysAppBase):
     package = 'nfie_data_viewer'
     root_url = 'nfie-data-viewer'
     color = '#b2b2ff'
+    description =   'This app views the contents of a NFIE RAPID output netCDF file. These files contain stream discharge predictions spanning twelve hours from the time generated for every stream reach in the United States.'
         
     def url_maps(self):
         """

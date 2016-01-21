@@ -57,7 +57,15 @@ $(function () {
             'of those sites, this app has little practical use since you cannot currently upload your own ' +
             'RAPID Output NetCDF file. Please click the links to the resources above to browse their ' +
             'file repositories. When locating an applicable NetCDF file, you will be given a "Open File ' +
-            'in Tethys Viewer" link that will redirect you here to view the chosen file. Good luck!');
+            'in Tethys Viewer" link that will redirect you here to view the chosen file. Good luck!</p>' +
+            '<div id="extra-buttons"></div>');
+
+        $('#extra-buttons').append('<a class="btn btn-default btn-sm" href="https://www.hydroshare.org/search/?q=rapid&selected_facets=resource_type_exact:NetcdfResource">Browse HS RAPID NetCDF Resources</a><br>');
+        $('#extra-buttons').append('<a class="btn btn-default btn-sm" href="https://appsdev.hydroshare.org/apps/nfie-irods-explorer/">Go to NFIE iRODS Explorer</a><br>');
+        if (document.referrer == "https://appsdev.hydroshare.org/apps/") {
+            $('#extra-buttons').append('<a class="btn btn-default btn-sm" href="https://appsdev.hydroshare.org/apps">Return to HydroShare Apps</a>');
+        }
+
     }
     else {
 
@@ -118,6 +126,9 @@ $(function () {
     }
 
     // Show welcome modal
+    if (document.referrer == "https://appsdev.hydroshare.org/apps/") {
+        $('#extra-buttons').append('<a class="btn btn-default btn-sm" href="https://appsdev.hydroshare.org/apps">Return to HydroShare Apps</a>');
+    }
     popupDiv.modal('show');
 
     /**********************************
